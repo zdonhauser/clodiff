@@ -33,8 +33,8 @@ export function parseDiff(input: string): DiffFile[] {
   let newLineNo = 0
 
   const pushHunk = () => {
-    if (current && currentHunk) {
-      current.hunks.push(currentHunk)
+    if (currentHunk) {
+      current!.hunks.push(currentHunk)
       currentHunk = null
     }
   }
@@ -53,6 +53,7 @@ export function parseDiff(input: string): DiffFile[] {
       pushFile()
 
       // Parse paths from "diff --git a/<old> b/<new>"
+      // known limitation: breaks if filename contains ' b/' — cross-check with ---/+++ lines would fix this but adds complexity
       const gitDiffRe = /^diff --git a\/(.+) b\/(.+)$/
       const m = gitDiffRe.exec(line)
       const oldPath = m ? m[1] : ""
@@ -92,7 +93,7 @@ export function parseDiff(input: string): DiffFile[] {
 
     // Binary file marker — no hunks will follow
     if (line.startsWith("Binary files ")) {
-      // status stays as-is (could be "added" already set, or "modified")
+      // binary files have no hunks; status was already set by mode markers above
       continue
     }
 
@@ -109,16 +110,15 @@ export function parseDiff(input: string): DiffFile[] {
       pushHunk()
       oldLineNo = parseInt(hunkMatch[1], 10)
       newLineNo = parseInt(hunkMatch[2], 10)
+      // header is everything up to and including the closing @@
+      // e.g. "@@ -1,5 +1,6 @@"  (trailing function name is optional, we exclude it)
+      const headerEnd = line.indexOf(" @@", 3) + 3
       currentHunk = {
-        header: line.replace(/\s*@@\s*.*$/, " @@").replace(/ @@$/, " @@").trimEnd(),
+        header: line.slice(0, headerEnd),
         oldStart: oldLineNo,
         newStart: newLineNo,
         lines: [],
       }
-      // Fix: header should be everything up to and including the closing @@
-      // e.g. "@@ -1,5 +1,6 @@"  (trailing function name is optional, we exclude it)
-      const headerEnd = line.indexOf(" @@", 3) + 3
-      currentHunk.header = line.slice(0, headerEnd)
       continue
     }
 
