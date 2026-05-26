@@ -342,6 +342,60 @@ describe("reanchorComments", () => {
     expect(result[0].is_outdated).toBe(true)
   })
 
+  it("picks closest match when line_content appears multiple times in file", () => {
+    // "return null" appears at lines 3, 10, and 20; comment originally at line 11
+    // should re-anchor to line 10, not line 3
+    const diff: DiffFile[] = [
+      {
+        path: "src/app.ts",
+        oldPath: "src/app.ts",
+        status: "modified",
+        hunks: [
+          {
+            header: "@@ -1,20 +1,20 @@",
+            oldStart: 1,
+            newStart: 1,
+            lines: [
+              { type: "added", content: "line 1", oldLineNumber: null, newLineNumber: 1 },
+              { type: "added", content: "line 2", oldLineNumber: null, newLineNumber: 2 },
+              { type: "added", content: "return null", oldLineNumber: null, newLineNumber: 3 },
+              { type: "added", content: "line 4", oldLineNumber: null, newLineNumber: 4 },
+              { type: "added", content: "line 5", oldLineNumber: null, newLineNumber: 5 },
+              { type: "added", content: "line 6", oldLineNumber: null, newLineNumber: 6 },
+              { type: "added", content: "line 7", oldLineNumber: null, newLineNumber: 7 },
+              { type: "added", content: "line 8", oldLineNumber: null, newLineNumber: 8 },
+              { type: "added", content: "line 9", oldLineNumber: null, newLineNumber: 9 },
+              { type: "added", content: "return null", oldLineNumber: null, newLineNumber: 10 },
+              { type: "added", content: "line 11", oldLineNumber: null, newLineNumber: 11 },
+              { type: "added", content: "line 12", oldLineNumber: null, newLineNumber: 12 },
+              { type: "added", content: "line 13", oldLineNumber: null, newLineNumber: 13 },
+              { type: "added", content: "line 14", oldLineNumber: null, newLineNumber: 14 },
+              { type: "added", content: "line 15", oldLineNumber: null, newLineNumber: 15 },
+              { type: "added", content: "line 16", oldLineNumber: null, newLineNumber: 16 },
+              { type: "added", content: "line 17", oldLineNumber: null, newLineNumber: 17 },
+              { type: "added", content: "line 18", oldLineNumber: null, newLineNumber: 18 },
+              { type: "added", content: "line 19", oldLineNumber: null, newLineNumber: 19 },
+              { type: "added", content: "return null", oldLineNumber: null, newLineNumber: 20 },
+            ],
+          },
+        ],
+      },
+    ]
+
+    const comment = makeComment({
+      body: "check return",
+      path: "src/app.ts",
+      commit_id: "abc123",
+      line: 11,
+      side: "RIGHT",
+      line_content: "return null",
+    })
+
+    const result = reanchorComments([comment], diff)
+    // Closest to original line 11 is line 10 (distance 1), not line 3 (distance 8) or 20 (distance 9)
+    expect(result[0].line).toBe(10)
+  })
+
   it("handles LEFT side comments by matching removed and context lines", () => {
     const diff: DiffFile[] = [
       {

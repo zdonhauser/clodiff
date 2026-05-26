@@ -83,7 +83,11 @@ export async function loadSession(repoDir: string): Promise<SessionFile | null> 
     return null
   }
   const raw = await readFile(path, "utf-8")
-  return JSON.parse(raw) as SessionFile
+  const data = JSON.parse(raw)
+  if (data.version !== 1) {
+    throw new Error("Unsupported session version: " + data.version)
+  }
+  return data as SessionFile
 }
 
 // Save session to repoDir/.review/session.json
@@ -92,6 +96,7 @@ export async function loadSession(repoDir: string): Promise<SessionFile | null> 
 export async function saveSession(repoDir: string, session: SessionFile): Promise<void> {
   const dir = reviewDir(repoDir)
   await mkdir(dir, { recursive: true })
+  session.updated_at = new Date().toISOString()
   await writeFile(sessionPath(repoDir), JSON.stringify(session, null, 2))
   await ensureGitignore(repoDir)
 }
@@ -126,7 +131,11 @@ export async function loadReplies(repoDir: string): Promise<ReplyEntry[]> {
     return []
   }
   const raw = await readFile(path, "utf-8")
-  return JSON.parse(raw) as ReplyEntry[]
+  const data = JSON.parse(raw)
+  if (!Array.isArray(data)) {
+    throw new Error("Invalid replies.json: expected array")
+  }
+  return data as ReplyEntry[]
 }
 
 // Delete repoDir/.review/replies.json
