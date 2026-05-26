@@ -57,6 +57,15 @@ describe("session", () => {
 
       await expect(loadSession(tmpDir)).rejects.toThrow()
     })
+
+    it("throws when version is not 1", async () => {
+      const reviewDir = join(tmpDir, ".review")
+      await mkdir(reviewDir, { recursive: true })
+      const session = makeSession({ version: 2 as unknown as 1 })
+      await writeFile(join(reviewDir, "session.json"), JSON.stringify(session))
+
+      await expect(loadSession(tmpDir)).rejects.toThrow(/Unsupported/)
+    })
   })
 
   describe("saveSession", () => {
@@ -79,12 +88,13 @@ describe("session", () => {
       const session1 = makeSession({ repo: "first/repo" })
       await saveSession(tmpDir, session1)
 
-      const session2 = makeSession({ repo: "second/repo" })
+      const session2 = makeSession({ repo: "second/repo", updated_at: "2026-01-01T00:00:00.000Z" })
       await saveSession(tmpDir, session2)
 
       const raw = await readFile(join(tmpDir, ".review", "session.json"), "utf-8")
       const parsed = JSON.parse(raw)
       expect(parsed.repo).toBe("second/repo")
+      expect(parsed.updated_at).not.toBe("2026-01-01T00:00:00.000Z")
     })
 
     it("adds .review/ to .gitignore if not already present", async () => {
@@ -115,6 +125,14 @@ describe("session", () => {
     it("returns empty array when replies.json does not exist", async () => {
       const result = await loadReplies(tmpDir)
       expect(result).toEqual([])
+    })
+
+    it("throws when replies.json is not an array", async () => {
+      const reviewDir = join(tmpDir, ".review")
+      await mkdir(reviewDir, { recursive: true })
+      await writeFile(join(reviewDir, "replies.json"), JSON.stringify({}))
+
+      await expect(loadReplies(tmpDir)).rejects.toThrow(/Invalid/)
     })
 
     it("returns parsed array when file exists", async () => {

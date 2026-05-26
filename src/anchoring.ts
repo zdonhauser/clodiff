@@ -49,13 +49,22 @@ export function reanchorComments(
     }
 
     const trimmedTarget = comment.line_content.trim()
-    const matchedLine = candidateLines.find(
+    const matchingLines = candidateLines.filter(
       line => line.content.trim() === trimmedTarget
     )
 
-    if (!matchedLine) {
+    if (matchingLines.length === 0) {
       return { ...comment, is_outdated: true }
     }
+
+    // Pick the match closest to the original comment.line (proximity-based tiebreaker)
+    const matchedLine = matchingLines.reduce((best, candidate) => {
+      const candidateNum = comment.side === "RIGHT" ? candidate.newLineNumber : candidate.oldLineNumber
+      const bestNum = comment.side === "RIGHT" ? best.newLineNumber : best.oldLineNumber
+      const candidateDist = candidateNum !== null ? Math.abs(candidateNum - comment.line) : Infinity
+      const bestDist = bestNum !== null ? Math.abs(bestNum - comment.line) : Infinity
+      return candidateDist < bestDist ? candidate : best
+    })
 
     // Determine the line number for this side
     const newLineNumber =
