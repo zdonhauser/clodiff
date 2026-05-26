@@ -75,7 +75,13 @@ export async function installHooks(repoDir: string): Promise<void> {
     },
   }
 
-  settings = { ...settings, ...hooksConfig }
+  settings = {
+    ...settings,
+    hooks: {
+      ...(typeof settings.hooks === "object" && settings.hooks !== null ? settings.hooks as Record<string, unknown> : {}),
+      ...hooksConfig.hooks
+    }
+  }
   await writeFile(settingsPath, JSON.stringify(settings, null, 2))
 
   // Copy hook scripts to .review/hooks/
