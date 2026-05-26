@@ -1,5 +1,8 @@
-import { describe, it, expect } from "bun:test"
-import { parseArgs } from "../cli"
+import { describe, it, expect, beforeEach, afterEach } from "bun:test"
+import { mkdtemp, rm, writeFile, mkdir } from "fs/promises"
+import { tmpdir } from "os"
+import { join } from "path"
+import { parseArgs, installHooks } from "../cli"
 
 describe("CLI args", () => {
   it("defaults base to main", () => {
@@ -90,5 +93,50 @@ describe("CLI args", () => {
     expect(args.port).toBe(3000)
     expect(args.resume).toBe(true)
     expect(args.stdin).toBe(true)
+  })
+})
+
+describe("installHooks", () => {
+  let tmpDir: string
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "clodiff-cli-test-"))
+  })
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true })
+  })
+
+  it("preserves existing PreToolUse hook alongside new UserPromptSubmit and SessionStart entries", async () => {
+    const settingsDir = join(tmpDir, ".claude")
+    await mkdir(settingsDir, { recursive: true })
+
+    const existingSettings = {
+      someOtherKey: "value",
+      hooks: {
+        PreToolUse: [
+          { hooks: [{ type: "command", command: "echo pre-tool-use" }] },
+        ],
+      },
+    }
+    await writeFile(join(settingsDir, "settings.json"), JSON.stringify(existingSettings, null, 2))
+
+    await installHooks(tmpDir)
+
+    const raw = await Bun.file(join(settingsDir, "settings.json")).text()
+    const result = JSON.parse(raw)
+
+    // Original key preserved
+    expect(result.someOtherKey).toBe("value")
+
+    // Pre-existing hook event preserved
+    expect(result.hooks.PreToolUse).toBeDefined()
+    expect(result.hooks.PreToolUse[0].hooks[0].command).toBe("echo pre-tool-use")
+
+    // New hook events added
+    expect(result.hooks.UserPromptSubmit).toBeDefined()
+    expect(result.hooks.SessionStart).toBeDefined()
+    expect(result.hooks.UserPromptSubmit[0].hooks[0].command).toContain("inject-replies.js")
+    expect(result.hooks.SessionStart[0].hooks[0].command).toContain("load-session.js")
   })
 })
