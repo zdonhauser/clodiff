@@ -84,19 +84,15 @@ function App() {
         setComments(msg.comments || [])
         if (msg.session) setSession(msg.session)
 
-        // Auto-expand files that have comments
-        if (msg.comments && msg.comments.length > 0) {
-          const pathsWithComments = new Set(msg.comments.map((c) => c.path))
-          setExpandedFiles((prev) => {
-            const next = { ...prev }
-            for (const path of pathsWithComments) {
-              if (next[path] === undefined) {
-                next[path] = true
-              }
-            }
-            return next
-          })
+        // Files with comments are expanded by default; all others are collapsed
+        const initDiff = msg.diff || []
+        const initComments = msg.comments || []
+        const filesWithComments = new Set(initComments.map((c) => c.path))
+        const expandedMap = {}
+        for (const file of initDiff) {
+          expandedMap[file.path] = filesWithComments.has(file.path)
         }
+        setExpandedFiles(expandedMap)
         break
       }
 
