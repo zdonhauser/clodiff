@@ -78,7 +78,6 @@ function SourceLabel({ source }) {
   const labels = {
     "claude-code": "Claude Code",
     "user": "You",
-    "review-team": "Review Team",
   }
   return html`
     <span style=${{
@@ -182,7 +181,7 @@ export function CommentCard({ comment, onReply, onResolve }) {
       <!-- Body -->
       <div style=${{
         padding: "12px",
-        fontSize: "14px",
+        fontSize: "var(--font-code-size)",
         lineHeight: "1.6",
         color: "var(--color-fg-default)",
         whiteSpace: "pre-wrap",
@@ -213,7 +212,7 @@ export function CommentCard({ comment, onReply, onResolve }) {
                     `}
                   </div>
                   <div style=${{
-                    fontSize: "13px",
+                    fontSize: "var(--font-code-size)",
                     lineHeight: "1.5",
                     color: "var(--color-fg-default)",
                     whiteSpace: "pre-wrap",

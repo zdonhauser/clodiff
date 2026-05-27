@@ -36,9 +36,7 @@ export function FileList({
         color: "var(--color-fg-muted)",
         fontSize: "14px",
       }}>
-        <div style=${{ fontSize: "32px", marginBottom: "12px" }}>📂</div>
-        <div>No diff loaded yet.</div>
-        <div style=${{ fontSize: "12px", marginTop: "4px" }}>Waiting for clodiff to initialize…</div>
+        <div style=${{ fontSize: "12px", marginTop: "4px" }}>Select a file from the sidebar, or choose a diff range in the header.</div>
       </div>
     `
   }

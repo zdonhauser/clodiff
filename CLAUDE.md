@@ -1,6 +1,6 @@
-# clodiff — Claude Code Integration Guide
+# clodiff — Claude integration
 
-clodiff is a local diff viewer and review companion for Claude Code. This document tells you everything you need to interact with it correctly.
+clodiff is a local code viewer that lives alongside your conversations. It gives you and the human a shared visual context — you can point to specific lines, annotate code, and navigate the repo while discussing it in chat.
 
 ---
 
@@ -13,7 +13,7 @@ import { existsSync } from "fs"
 const active = existsSync(".review/session.json")
 ```
 
-Read the session file to get `port` — the port the clodiff HTTP server is currently listening on:
+Read the session file to get `port`:
 
 ```javascript
 import { readFileSync } from "fs"
@@ -23,144 +23,100 @@ const port = session.port // e.g. 7777
 
 ---
 
-## ReviewComment schema
+## Pointing to code
 
-All review comments are stored in `.review/session.json` under `reviews[N].comments`. Each comment is a `ReviewComment` object:
-
-```typescript
-interface ReviewComment {
-  // Required fields
-  id: string              // UUID — must be unique, generate with crypto.randomUUID()
-  created_at: string      // ISO 8601 timestamp
-  source: "claude-code" | "user" | "review-team"
-  body: string            // Markdown comment text
-  path: string            // File path relative to repo root
-  commit_id: string       // Current HEAD commit SHA
-  line: number            // Absolute line number in the file (not relative to hunk)
-  side: "LEFT" | "RIGHT" // LEFT = old file / deleted lines; RIGHT = new file / added lines
-
-  // Strongly recommended
-  line_content: string    // Exact trimmed text of the commented line (used for re-anchoring)
-
-  // Optional
-  severity?: "error" | "warning" | "suggestion" | "note"
-  resolved?: boolean
-  replies?: ReviewComment[]
-  original_line?: number  // Set automatically if line moves after re-anchoring
-  is_outdated?: boolean   // Set automatically if line_content can no longer be found
-  start_line?: number     // For multi-line comments
-  start_side?: "LEFT" | "RIGHT"
-  in_reply_to_id?: number
-}
-```
-
-Worked example:
-
-```json
-{
-  "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-  "created_at": "2025-01-15T10:30:00Z",
-  "source": "claude-code",
-  "severity": "suggestion",
-  "body": "This should be wrapped in useCallback to avoid re-renders.",
-  "path": "src/components/Button.tsx",
-  "commit_id": "abc123def456",
-  "line": 42,
-  "side": "RIGHT",
-  "line_content": "const handleClick = () => {",
-  "resolved": false
-}
-```
-
----
-
-## How to emit a comment
-
-1. Run `git diff <base_branch>` (use `session.base_branch` from `session.json`) to get the current diff.
-2. Identify the file path, the absolute line number, and the side:
-   - `"RIGHT"` — new-file side (added lines, context in the new file)
-   - `"LEFT"` — old-file side (removed lines, context in the old file)
-   - **Important:** only comment on lines that actually appear in the diff output. Lines outside the hunk context windows (more than ~3 lines from any changed line) are invisible in the viewer and will be marked `is_outdated` on the next re-anchor.
-3. Read the exact text of the target line and trim it — this becomes `line_content`.
-4. Get the current HEAD commit: `git rev-parse HEAD`.
-5. Generate a UUID: `crypto.randomUUID()`.
-6. Build the `ReviewComment` object with all required fields.
-7. Read `.review/session.json`, append the comment to `reviews[reviews.length - 1].comments`, and write the file back.
-8. POST a `scroll_to` message to notify the viewer:
+Send a `scroll_to` message to jump the viewer to a specific line:
 
 ```javascript
-const session = JSON.parse(fs.readFileSync(".review/session.json", "utf-8"))
-const port = session.port // e.g. 7777
+await fetch(`http://localhost:${port}/_ws_broadcast`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ type: "scroll_to", path: "src/server.ts", line: 42 })
+})
+```
 
+Send a `highlight` message to visually call out a line with a fading glow — useful when drawing attention to specific code in conversation:
+
+```javascript
 await fetch(`http://localhost:${port}/_ws_broadcast`, {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
-    type: "scroll_to",
-    path: "src/components/Button.tsx",
-    line: 42
+    type: "highlight",
+    path: "src/server.ts",
+    line: 42,
+    duration: 4000,  // ms before fading (default: 4000)
+    scroll: true     // also scroll to the line (default: true)
   })
 })
 ```
 
-The viewer will scroll to the commented line and highlight it.
+---
+
+## Annotating code
+
+You can leave persistent inline annotations on specific lines. Annotations appear as comment cards in the viewer next to the relevant code.
+
+```typescript
+interface Annotation {
+  id: string              // crypto.randomUUID()
+  created_at: string      // ISO 8601
+  source: "claude-code" | "user"
+  body: string            // the annotation text
+  path: string            // file path relative to repo root
+  commit_id: string       // git rev-parse HEAD
+  line: number            // absolute line number
+  side: "LEFT" | "RIGHT" // LEFT = old file; RIGHT = new file / current file
+  line_content: string    // trimmed text of the target line
+  severity?: "error" | "warning" | "suggestion" | "note"
+  resolved?: boolean
+  replies?: Annotation[]
+}
+```
+
+To emit an annotation:
+
+1. Get the current HEAD: `git rev-parse HEAD`
+2. Build the object with all fields above
+3. Read `.review/session.json`, append to `reviews[reviews.length - 1].comments`, write back
+4. Broadcast `scroll_to` so the viewer jumps to the annotation
+
+```javascript
+const session = JSON.parse(fs.readFileSync(".review/session.json", "utf-8"))
+session.reviews[session.reviews.length - 1].comments.push(annotation)
+fs.writeFileSync(".review/session.json", JSON.stringify(session, null, 2))
+```
 
 ---
 
-## Handling replies from the UserPromptSubmit hook
+## Handling replies
 
-When a user replies to a comment inside the clodiff viewer, the reply is saved to `.review/replies.json`. The `UserPromptSubmit` hook injects these replies into your context at the start of each prompt. Injected replies look like:
+When the human replies to an annotation in the viewer, the reply lands in `.review/replies.json`. The `UserPromptSubmit` hook (installed via `clodiff --install-hooks`) injects pending replies into each prompt:
 
 ```
 [clodiff replies]
-<reply id="uuid-here" comment_id="COMMENT_ID" created_at="2025-01-15T11:00:00Z">
-The user's reply text goes here.
+<reply id="uuid" comment_id="COMMENT_ID" created_at="...">
+Reply text here.
 </reply>
 ```
 
-Treat each `<reply>` as the user's direct response to the comment whose `id` matches `comment_id`. You can use this to resolve the comment, refine it, or continue the discussion.
-
----
-
-## Session resume
-
-If `.review/session.json` exists when a session starts (via the `SessionStart` hook), load it and continue the existing review. Do not start a new session.
-
-The `load-session.js` hook (installed by `clodiff --install-hooks`) injects the current session state as context at `SessionStart` automatically.
-
----
-
-## What NOT to do
-
-- **Do NOT narrate review comments in chat.** Write them to `session.json` directly and reference them briefly (e.g., "Added 3 comments to the diff viewer.").
-- **Do NOT start a new session if `session.json` already exists.** Resume it.
-- **Do NOT emit comments without `line_content`.** Without it, comments cannot be re-anchored after commits.
-- **Do NOT emit a comment without a UUID `id` field.** The viewer and reply system depend on stable IDs.
-- **Do NOT use relative line numbers.** Always use absolute line numbers (the actual line number in the file, as shown by the diff hunk offsets).
-- **Do NOT comment on lines outside the diff hunk context.** Only lines that appear in `git diff` output are visible in the viewer. A comment on a line not in any hunk will be invisible and immediately marked `is_outdated` on the next re-anchor.
-- **Do NOT guess the port.** Always read it from `session.json`.
+Treat each `<reply>` as the human's response to the annotation with that `comment_id`.
 
 ---
 
 ## Server endpoints
 
-All endpoints are served at `http://localhost:<port>`:
-
 | Endpoint | Method | Description |
 |---|---|---|
-| `/` | GET | Serves the diff viewer UI |
-| `/init` | GET | Returns the full init payload: `{ type, diff, comments, session }` |
-| `/session` | GET | Returns current `session.json` contents |
-| `/reply` | POST | Append a reply: `{ comment_id, body }` |
-| `/review/event` | POST | Set review event: `{ event: "COMMENT" \| "APPROVE" \| "REQUEST_CHANGES" }` |
-| `/push` | POST | Push review to GitHub (requires `gh` auth) |
-| `/_ws_broadcast` | POST | Broadcast a JSON message to all connected WebSocket clients |
-| `/ws` | WS | WebSocket connection — receives `init` on connect and `session_update` on changes |
-
----
-
-## GitHub push
-
-Once the review is complete, clicking "Push to GitHub" in the viewer UI posts to `/push`. This requires `gh` to be authenticated (`gh auth login`). The push creates a GitHub pull request review from the comments in the latest `Review` object.
-
-Set the review event in the viewer (Approve / Comment / Request Changes) before pushing.
+| `/` | GET | Viewer UI |
+| `/init` | GET | Current diff, annotations, session |
+| `/session` | GET | Session file contents |
+| `/reply` | POST | `{ comment_id, body }` — append a reply |
+| `/_ws_broadcast` | POST | Broadcast any JSON message to all viewer clients |
+| `/refs` | GET | List of git refs (branches/tags) |
+| `/rediff` | POST | `{ from, to }` — recompute diff and push new init to all clients |
+| `/file` | GET | `?path=...` — raw file contents |
+| `/tree` | GET | All tracked files in the repo |
+| `/review/event` | POST | `{ event }` — set APPROVE / REQUEST_CHANGES / COMMENT on the current review |
+| `/push` | POST | Push current annotations to GitHub as a PR review |
+| `/ws` | WS | WebSocket — receives `init` on connect, live updates after |

@@ -5,9 +5,9 @@ import { join } from "path"
 import { parseArgs, installHooks } from "../cli"
 
 describe("CLI args", () => {
-  it("defaults base to main", () => {
+  it("defaults base to empty string (browse mode)", () => {
     const args = parseArgs([])
-    expect(args.base).toBe("main")
+    expect(args.base).toBe("")
   })
 
   it("accepts --base flag", () => {
@@ -162,6 +162,10 @@ describe("installHooks", () => {
     expect(result.hooks.SessionStart).toBeDefined()
     expect(result.hooks.UserPromptSubmit[0].hooks[0].command).toContain("inject-replies.js")
     expect(result.hooks.SessionStart[0].hooks[0].command).toContain("load-session.js")
+
+    // Skill installed
+    const { existsSync } = await import("fs")
+    expect(existsSync(join(settingsDir, "skills", "clodiff.md"))).toBe(true)
   })
 
   it("appends to existing UserPromptSubmit array instead of replacing it", async () => {

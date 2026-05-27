@@ -1,5 +1,6 @@
 import { html } from "https://esm.sh/htm/preact"
 import { useState, useCallback } from "https://esm.sh/preact/hooks"
+import { RefPicker } from "./RefPicker.js"
 
 /**
  * Header component.
@@ -11,40 +12,53 @@ import { useState, useCallback } from "https://esm.sh/preact/hooks"
  *   viewMode   — "unified" | "side-by-side"
  *   onViewMode — (mode) => void
  */
-export function Header({ session, fileCount, wsStatus, viewMode, onViewMode }) {
-  const [pushStatus, setPushStatus] = useState(null) // null | "pushing" | "done" | "error"
-  const [reviewStatus, setReviewStatus] = useState(null)
+export function Header({ session, fileCount, wsStatus, viewMode, onViewMode, sidebarOpen, onToggleSidebar }) {
+  const [rediffStatus, setRediffStatus] = useState(null)
+  const [fromRef, setFromRef] = useState(null)
+  const [toRef, setToRef] = useState(null)
+  const [reviewStatus, setReviewStatus] = useState(null) // null | "approving" | "approved" | "requesting" | "changes_requested" | "error"
+  const [pushStatus, setPushStatus] = useState(null)     // null | "pushing" | "done" | "error"
 
   const baseBranch = session?.base_branch || "main"
   const currentBranch = session?.repo
     ? session.repo.split("/").pop()
     : "HEAD"
 
-  const handleApprove = useCallback(async () => {
-    setReviewStatus("approving")
-    try {
-      await fetch("/review/event", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ event: "APPROVE" }),
-      })
-      setReviewStatus("approved")
-      setTimeout(() => setReviewStatus(null), 2000)
-    } catch {
-      setReviewStatus("error")
-      setTimeout(() => setReviewStatus(null), 3000)
-    }
-  }, [])
+  // _from/_to are injected by the server to track live rediff state
+  const displayFrom = fromRef ?? session?._from ?? baseBranch
+  const displayTo = toRef ?? session?._to ?? "HEAD"
 
-  const handleRequestChanges = useCallback(async () => {
-    setReviewStatus("requesting")
+  const handleRediff = useCallback(async (newFrom, newTo) => {
+    const f = newFrom ?? displayFrom
+    const t = newTo ?? displayTo
+    setRediffStatus("loading")
+    try {
+      const res = await fetch("/rediff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from: f, to: t }),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      setFromRef(f)
+      setToRef(t)
+      setRediffStatus(null)
+    } catch {
+      setRediffStatus("error")
+      setTimeout(() => setRediffStatus(null), 3000)
+    }
+  }, [displayFrom, displayTo])
+
+  const handleReviewEvent = useCallback(async (event) => {
+    const key = event === "APPROVE" ? "approving" : "requesting"
+    const done = event === "APPROVE" ? "approved" : "changes_requested"
+    setReviewStatus(key)
     try {
       await fetch("/review/event", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ event: "REQUEST_CHANGES" }),
+        body: JSON.stringify({ event }),
       })
-      setReviewStatus("changes_requested")
+      setReviewStatus(done)
       setTimeout(() => setReviewStatus(null), 2000)
     } catch {
       setReviewStatus("error")
@@ -56,10 +70,7 @@ export function Header({ session, fileCount, wsStatus, viewMode, onViewMode }) {
     setPushStatus("pushing")
     try {
       const res = await fetch("/push", { method: "POST" })
-      if (!res.ok) {
-        const msg = await res.text()
-        throw new Error(msg)
-      }
+      if (!res.ok) throw new Error(await res.text())
       setPushStatus("done")
       setTimeout(() => setPushStatus(null), 3000)
     } catch (err) {
@@ -84,17 +95,21 @@ export function Header({ session, fileCount, wsStatus, viewMode, onViewMode }) {
         : "Disconnected"
 
     return html`
-      <span style=${{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "5px",
-        fontSize: "12px",
-        color: "var(--color-fg-muted)",
-        padding: "3px 8px",
-        borderRadius: "var(--radius-sm)",
-        background: "var(--color-canvas-subtle)",
-        border: "1px solid var(--color-border-default)",
-      }}>
+      <span
+        title=${label}
+        style=${{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "5px",
+          fontSize: "12px",
+          color: "var(--color-fg-muted)",
+          padding: "3px 6px",
+          borderRadius: "var(--radius-sm)",
+          background: "var(--color-canvas-subtle)",
+          border: "1px solid var(--color-border-default)",
+          flexShrink: 0,
+          whiteSpace: "nowrap",
+        }}>
         <span style=${{
           width: "7px",
           height: "7px",
@@ -103,7 +118,7 @@ export function Header({ session, fileCount, wsStatus, viewMode, onViewMode }) {
           display: "inline-block",
           flexShrink: 0,
         }} />
-        ${label}
+        <span class="ws-label">${label}</span>
       </span>
     `
   }
@@ -116,6 +131,8 @@ export function Header({ session, fileCount, wsStatus, viewMode, onViewMode }) {
     cursor: "pointer",
     border: "1px solid var(--color-border-default)",
     fontFamily: "var(--font-ui)",
+    flexShrink: 0,
+    whiteSpace: "nowrap",
   }
 
   return html`
@@ -131,12 +148,38 @@ export function Header({ session, fileCount, wsStatus, viewMode, onViewMode }) {
       <div style=${{
         display: "flex",
         alignItems: "center",
-        gap: "12px",
-        padding: "8px 16px",
-        flexWrap: "wrap",
+        gap: "8px",
+        padding: "8px 12px",
+        flexWrap: "nowrap",
+        overflow: "hidden",
       }}>
         <!-- Logo + branch info -->
         <div style=${{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: 0 }}>
+          <!-- Sidebar toggle -->
+          <button
+            onClick=${onToggleSidebar}
+            title=${sidebarOpen ? "Close file tree" : "Open file tree"}
+            style=${{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: "3px 5px",
+              borderRadius: "var(--radius-sm)",
+              color: "var(--color-fg-muted)",
+              display: "flex",
+              alignItems: "center",
+              flexShrink: 0,
+            }}
+            onMouseEnter=${(e) => { e.currentTarget.style.background = "var(--color-canvas-subtle)" }}
+            onMouseLeave=${(e) => { e.currentTarget.style.background = "none" }}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <rect x="1" y="3" width="14" height="1.5" rx="0.75"/>
+              <rect x="1" y="7.25" width="14" height="1.5" rx="0.75"/>
+              <rect x="1" y="11.5" width="14" height="1.5" rx="0.75"/>
+            </svg>
+          </button>
+
           <span style=${{
             fontWeight: "700",
             fontSize: "15px",
@@ -147,7 +190,7 @@ export function Header({ session, fileCount, wsStatus, viewMode, onViewMode }) {
 
           <span style=${{ color: "var(--color-fg-muted)" }}>·</span>
 
-          <!-- Branch display -->
+          <!-- Branch display with pickers -->
           <span style=${{
             display: "flex",
             alignItems: "center",
@@ -155,27 +198,24 @@ export function Header({ session, fileCount, wsStatus, viewMode, onViewMode }) {
             fontFamily: "var(--font-mono)",
             fontSize: "12px",
             color: "var(--color-fg-default)",
-            overflow: "hidden",
           }}>
-            <span style=${{
-              padding: "1px 6px",
-              background: "var(--color-canvas-subtle)",
-              border: "1px solid var(--color-border-default)",
-              borderRadius: "var(--radius-sm)",
-              color: "var(--color-fg-muted)",
-              whiteSpace: "nowrap",
-            }}>${baseBranch}</span>
-            <span style=${{ color: "var(--color-fg-muted)" }}>←</span>
-            <span style=${{
-              padding: "1px 6px",
-              background: "#ddf4ff",
-              border: "1px solid #b6e3ff",
-              borderRadius: "var(--radius-sm)",
-              color: "#0969da",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}>${currentBranch}</span>
+            <${RefPicker}
+              value=${displayFrom}
+              label="base"
+              onSelect=${(ref) => handleRediff(ref, displayTo)}
+            />
+            <span style=${{ color: "var(--color-fg-muted)", userSelect: "none" }}>←</span>
+            <${RefPicker}
+              value=${displayTo}
+              label="compare"
+              onSelect=${(ref) => handleRediff(displayFrom, ref)}
+            />
+            ${rediffStatus === "loading" && html`
+              <span style=${{ fontSize: "11px", color: "var(--color-fg-muted)", marginLeft: "4px" }}>Reloading…</span>
+            `}
+            ${rediffStatus === "error" && html`
+              <span style=${{ fontSize: "11px", color: "var(--color-danger-fg)", marginLeft: "4px" }}>Rediff failed</span>
+            `}
           </span>
 
           <!-- File count -->
@@ -200,7 +240,9 @@ export function Header({ session, fileCount, wsStatus, viewMode, onViewMode }) {
         gap: "8px",
         padding: "6px 16px 8px",
         borderTop: "1px solid var(--color-border-muted)",
-        flexWrap: "wrap",
+        overflowX: "auto",
+        WebkitOverflowScrolling: "touch",
+        flexShrink: 0,
       }}>
         <!-- View mode toggle -->
         <div style=${{
@@ -208,6 +250,7 @@ export function Header({ session, fileCount, wsStatus, viewMode, onViewMode }) {
           border: "1px solid var(--color-border-default)",
           borderRadius: "var(--radius-sm)",
           overflow: "hidden",
+          flexShrink: 0,
         }}>
           ${["unified", "side-by-side"].map((mode) => html`
             <button
@@ -222,6 +265,7 @@ export function Header({ session, fileCount, wsStatus, viewMode, onViewMode }) {
                 borderRight: mode === "unified" ? "1px solid var(--color-border-default)" : "none",
                 fontWeight: viewMode === mode ? "600" : "400",
                 fontSize: "12px",
+                whiteSpace: "nowrap",
               }}
             >${mode === "unified" ? "Unified" : "Side by side"}</button>
           `)}
@@ -231,24 +275,13 @@ export function Header({ session, fileCount, wsStatus, viewMode, onViewMode }) {
 
         <!-- Approve -->
         <button
-          onClick=${handleApprove}
+          onClick=${() => handleReviewEvent("APPROVE")}
           disabled=${reviewStatus === "approving"}
           style=${{
             ...btnBase,
-            background:
-              reviewStatus === "approved"
-                ? "#2da44e"
-                : reviewStatus === "approving"
-                ? "var(--color-canvas-subtle)"
-                : "var(--color-bg)",
-            color:
-              reviewStatus === "approved"
-                ? "#ffffff"
-                : "var(--color-success-fg)",
-            borderColor:
-              reviewStatus === "approved"
-                ? "#2da44e"
-                : "var(--color-border-default)",
+            background: reviewStatus === "approved" ? "#2da44e" : "var(--color-bg)",
+            color: reviewStatus === "approved" ? "#ffffff" : "var(--color-success-fg)",
+            borderColor: reviewStatus === "approved" ? "#2da44e" : "var(--color-border-default)",
           }}
         >
           ${reviewStatus === "approving" ? "Approving…" : reviewStatus === "approved" ? "✓ Approved" : "Approve"}
@@ -256,29 +289,16 @@ export function Header({ session, fileCount, wsStatus, viewMode, onViewMode }) {
 
         <!-- Request Changes -->
         <button
-          onClick=${handleRequestChanges}
+          onClick=${() => handleReviewEvent("REQUEST_CHANGES")}
           disabled=${reviewStatus === "requesting"}
           style=${{
             ...btnBase,
-            background:
-              reviewStatus === "changes_requested"
-                ? "var(--color-danger-fg)"
-                : "var(--color-bg)",
-            color:
-              reviewStatus === "changes_requested"
-                ? "#ffffff"
-                : "var(--color-danger-fg)",
-            borderColor:
-              reviewStatus === "changes_requested"
-                ? "var(--color-danger-fg)"
-                : "var(--color-border-default)",
+            background: reviewStatus === "changes_requested" ? "var(--color-danger-fg)" : "var(--color-bg)",
+            color: reviewStatus === "changes_requested" ? "#ffffff" : "var(--color-danger-fg)",
+            borderColor: reviewStatus === "changes_requested" ? "var(--color-danger-fg)" : "var(--color-border-default)",
           }}
         >
-          ${reviewStatus === "requesting"
-            ? "Requesting…"
-            : reviewStatus === "changes_requested"
-            ? "✓ Changes Requested"
-            : "Request Changes"}
+          ${reviewStatus === "requesting" ? "Requesting…" : reviewStatus === "changes_requested" ? "✓ Changes Requested" : "Request Changes"}
         </button>
 
         <!-- Push to GitHub -->
@@ -287,23 +307,12 @@ export function Header({ session, fileCount, wsStatus, viewMode, onViewMode }) {
           disabled=${pushStatus === "pushing"}
           style=${{
             ...btnBase,
-            background:
-              pushStatus === "done"
-                ? "#2da44e"
-                : pushStatus === "error"
-                ? "var(--color-danger-fg)"
-                : "#2da44e",
+            background: pushStatus === "error" ? "var(--color-danger-fg)" : "#2da44e",
             color: "#ffffff",
             border: "none",
           }}
         >
-          ${pushStatus === "pushing"
-            ? "Pushing…"
-            : pushStatus === "done"
-            ? "✓ Pushed"
-            : pushStatus === "error"
-            ? "Push Failed"
-            : "Push to GitHub"}
+          ${pushStatus === "pushing" ? "Pushing…" : pushStatus === "done" ? "✓ Pushed" : pushStatus === "error" ? "Push Failed" : "Push to GitHub"}
         </button>
       </div>
     </header>

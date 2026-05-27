@@ -63,8 +63,8 @@ export function FileSection({ file, comments = [], expanded, onToggle, viewMode,
         gap: "2px",
         marginLeft: "8px",
       }}>
-        <span style=${{ color: "var(--color-added-gutter)", fontSize: "12px", fontWeight: "500" }}>+${added}</span>
-        <span style=${{ color: "var(--color-removed-gutter)", fontSize: "12px", fontWeight: "500", marginLeft: "4px" }}>−${removed}</span>
+        <span style=${{ color: "var(--color-added-gutter)", fontSize: "var(--font-code-size)", fontWeight: "500" }}>+${added}</span>
+        <span style=${{ color: "var(--color-removed-gutter)", fontSize: "var(--font-code-size)", fontWeight: "500", marginLeft: "4px" }}>−${removed}</span>
         <span style=${{ display: "flex", gap: "1px", marginLeft: "6px" }}>
           ${Array.from({ length: addBars }).map((_, i) => html`
             <span key=${"a" + i} style=${{
@@ -116,7 +116,7 @@ export function FileSection({ file, comments = [], expanded, onToggle, viewMode,
       >
         <!-- Chevron -->
         <span style=${{
-          fontSize: "12px",
+          fontSize: "var(--font-code-size)",
           color: "var(--color-fg-muted)",
           width: "14px",
           textAlign: "center",
@@ -134,7 +134,7 @@ export function FileSection({ file, comments = [], expanded, onToggle, viewMode,
         <!-- File path -->
         <span style=${{
           fontFamily: "var(--font-mono)",
-          fontSize: "13px",
+          fontSize: "var(--font-code-size)",
           color: "var(--color-fg-default)",
           flex: 1,
           overflow: "hidden",
@@ -203,7 +203,7 @@ export function FileSection({ file, comments = [], expanded, onToggle, viewMode,
         <div style=${{
           padding: "16px",
           color: "var(--color-fg-muted)",
-          fontSize: "13px",
+          fontSize: "var(--font-code-size)",
           textAlign: "center",
         }}>
           ${file.status === "added" ? "New file" : file.status === "removed" ? "Deleted file" : "Binary file or no changes"}
