@@ -9,7 +9,7 @@ export interface GitHubComment {
   body: string
   start_line?: number
   start_side?: "LEFT" | "RIGHT"
-  in_reply_to_id?: string
+  in_reply_to_id?: number
 }
 
 export interface GitHubReviewPayload {
@@ -147,8 +147,7 @@ export async function pushReview(
     {
       stdout: "pipe",
       stderr: "pipe",
-      stdin: "pipe",
-      input: body,
+      stdin: Buffer.from(body),
     },
   )
   await apiProc.exited
