@@ -8,6 +8,7 @@ export interface ServerOptions {
   port: number
   repoDir: string
   viewerDir: string
+  getInitPayload?: () => unknown
 }
 
 export interface StartServerResult {
@@ -16,7 +17,7 @@ export interface StartServerResult {
 }
 
 export async function startServer(options: ServerOptions): Promise<StartServerResult> {
-  const { repoDir, viewerDir } = options
+  const { repoDir, viewerDir, getInitPayload } = options
   const wsClients = new Set<WebSocket>()
 
   // Try to start on the specified port, auto-increment if taken
@@ -53,6 +54,22 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
                 return new Response("Invalid JSON", { status: 400 })
               }
             })
+          }
+
+          // GET /init — return current init payload (full diff + session state)
+          if (url.pathname === "/init" && req.method === "GET") {
+            if (!getInitPayload) {
+              return new Response("No init payload available", { status: 404 })
+            }
+            try {
+              const payload = getInitPayload()
+              return new Response(JSON.stringify(payload), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+              })
+            } catch {
+              return new Response("Internal Server Error", { status: 500 })
+            }
           }
 
           // GET /session — return current session.json
@@ -195,6 +212,14 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
         websocket: {
           open(ws) {
             wsClients.add(ws as unknown as WebSocket)
+            if (getInitPayload) {
+              try {
+                const payload = getInitPayload()
+                ws.send(JSON.stringify(payload))
+              } catch {
+                // Don't crash on init payload errors
+              }
+            }
           },
           close(ws) {
             wsClients.delete(ws as unknown as WebSocket)
