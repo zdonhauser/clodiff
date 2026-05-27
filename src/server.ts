@@ -1,6 +1,7 @@
 import { join } from "path"
+import path from "path"
 import { existsSync } from "fs"
-import { watch } from "fs"
+import { watch, mkdirSync } from "fs"
 
 export interface ServerOptions {
   port: number
@@ -70,6 +71,10 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
             filePath = join(viewerDir, relativePath)
           }
 
+          if (!filePath.startsWith(viewerDir + "/") && filePath !== path.join(viewerDir, "index.html")) {
+            return new Response("Forbidden", { status: 403 })
+          }
+
           if (existsSync(filePath)) {
             return new Response(Bun.file(filePath))
           }
@@ -113,10 +118,11 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
     throw new Error("Failed to start server")
   }
 
-  // Watch session.json for changes and broadcast to WS clients
-  const sessionJsonPath = join(repoDir, ".review", "session.json")
-  try {
-    watch(sessionJsonPath, { persistent: false }, () => {
+  // Watch .review/ directory for session.json changes and broadcast to WS clients
+  const reviewDir = join(repoDir, ".review")
+  mkdirSync(reviewDir, { recursive: true })
+  watch(reviewDir, { persistent: false }, (event, filename) => {
+    if (filename === "session.json") {
       const msg = JSON.stringify({ type: "session_update", timestamp: Date.now() })
       for (const client of wsClients) {
         try {
@@ -125,10 +131,8 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
           // Client may have disconnected
         }
       }
-    })
-  } catch {
-    // File may not exist yet; that's fine
-  }
+    }
+  })
 
   return { port, server }
 }

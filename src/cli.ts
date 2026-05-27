@@ -13,6 +13,12 @@ export interface CliArgs {
   installHooks: boolean
 }
 
+function nextValue(argv: string[], i: number, flag: string): string {
+  const val = argv[i + 1]
+  if (val === undefined || val.startsWith("--")) throw new Error(`${flag} requires a value`)
+  return val
+}
+
 export function parseArgs(argv: string[]): CliArgs {
   const args: CliArgs = {
     base: "main",
@@ -27,19 +33,24 @@ export function parseArgs(argv: string[]): CliArgs {
     const arg = argv[i]
 
     if (arg === "--base") {
-      args.base = argv[++i]
+      args.base = nextValue(argv, i, "--base")
+      i++
     } else if (arg === "--port") {
-      args.port = parseInt(argv[++i], 10)
+      args.port = parseInt(nextValue(argv, i, "--port"), 10)
+      i++
     } else if (arg === "--resume") {
       args.resume = true
     } else if (arg === "--stdin") {
       args.stdin = true
     } else if (arg === "--patch") {
-      args.patch = argv[++i]
+      args.patch = nextValue(argv, i, "--patch")
+      i++
     } else if (arg === "--from") {
-      args.from = argv[++i]
+      args.from = nextValue(argv, i, "--from")
+      i++
     } else if (arg === "--to") {
-      args.to = argv[++i]
+      args.to = nextValue(argv, i, "--to")
+      i++
     } else if (arg === "--install-hooks") {
       args.installHooks = true
     } else if (arg.startsWith("--")) {
@@ -75,13 +86,16 @@ export async function installHooks(repoDir: string): Promise<void> {
     },
   }
 
-  settings = {
-    ...settings,
-    hooks: {
-      ...(typeof settings.hooks === "object" && settings.hooks !== null ? settings.hooks as Record<string, unknown> : {}),
-      ...hooksConfig.hooks
-    }
+  const existingHooks = typeof settings.hooks === "object" && settings.hooks !== null
+    ? settings.hooks as Record<string, unknown[]>
+    : {}
+
+  const merged: Record<string, unknown[]> = { ...existingHooks }
+  for (const [event, entries] of Object.entries(hooksConfig.hooks)) {
+    const existing = Array.isArray(merged[event]) ? merged[event] : []
+    merged[event] = [...existing, ...entries]
   }
+  settings = { ...settings, hooks: merged }
   await writeFile(settingsPath, JSON.stringify(settings, null, 2))
 
   // Copy hook scripts to .review/hooks/

@@ -20,10 +20,17 @@ if (!Array.isArray(replies) || replies.length === 0) {
   process.exit(0)
 }
 
+function escapeXmlAttr(str) {
+  return String(str).replace(/&/g, "&amp;").replace(/"/g, "&quot;")
+}
+function escapeXmlBody(str) {
+  return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+}
+
 let output = "[clodiff replies]\n"
 for (const reply of replies) {
-  output += `<reply id="${reply.id}" comment_id="${reply.comment_id}" created_at="${reply.created_at}">\n`
-  output += reply.body + "\n"
+  output += `<reply id="${escapeXmlAttr(reply.id)}" comment_id="${escapeXmlAttr(reply.comment_id)}" created_at="${escapeXmlAttr(reply.created_at)}">\n`
+  output += escapeXmlBody(reply.body) + "\n"
   output += "</reply>\n"
 }
 
