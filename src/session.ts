@@ -21,7 +21,7 @@ export interface ReviewComment {
   side: "LEFT" | "RIGHT"
   start_line?: number
   start_side?: "LEFT" | "RIGHT"
-  in_reply_to_id?: string
+  in_reply_to_id?: number
 }
 
 export interface Review {

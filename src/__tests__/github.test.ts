@@ -23,28 +23,6 @@ function mockSpawn(exitCode: number, stdout = "", stderr = "") {
   })
 }
 
-/** Capture what args were passed to spawn */
-function capturingSpawn(exitCode: number, stdout = "") {
-  const calls: string[][] = []
-  const spawn = (args: string[], _opts?: unknown) => {
-    calls.push(args)
-    return {
-      exitCode,
-      stdout: {
-        async text() {
-          return stdout
-        },
-      },
-      stderr: {
-        async text() {
-          return ""
-        },
-      },
-      exited: Promise.resolve(exitCode),
-    }
-  }
-  return { spawn, calls }
-}
 
 function makeComment(overrides?: Partial<ReviewComment>): ReviewComment {
   return {
@@ -64,7 +42,7 @@ function makeComment(overrides?: Partial<ReviewComment>): ReviewComment {
     side: "RIGHT",
     start_line: 3,
     start_side: "RIGHT",
-    in_reply_to_id: undefined,
+    in_reply_to_id: undefined as number | undefined,
     ...overrides,
   }
 }
@@ -278,12 +256,11 @@ describe("github", () => {
 
     it("passes the correct JSON payload", async () => {
       let callIndex = 0
-      let capturedInput: string | undefined
+      let capturedOpts: Record<string, unknown> | undefined
 
       const spawn = (args: string[], opts?: Record<string, unknown>) => {
         if (callIndex === 1) {
-          // Capture stdin input passed as body option
-          capturedInput = opts?.input as string
+          capturedOpts = opts
         }
         const outputs: Record<number, string> = {
           0: JSON.stringify({ owner: { login: "org" }, name: "repo" }),
@@ -302,10 +279,23 @@ describe("github", () => {
       const payload = { commit_id: "abc", event: "APPROVE" as const, comments: [] }
       await pushReview("/repo", 99, payload, spawn as unknown as typeof Bun.spawn)
 
-      expect(capturedInput).toBeDefined()
-      const parsed = JSON.parse(capturedInput!)
-      expect(parsed.event).toBe("APPROVE")
-      expect(parsed.commit_id).toBe("abc")
+      expect(capturedOpts).toBeDefined()
+      const body = JSON.parse(Buffer.from(capturedOpts!.stdin as Buffer).toString())
+      expect(body.event).toBe("APPROVE")
+      expect(body.commit_id).toBe("abc")
+    })
+
+    it("throws when gh repo view fails", async () => {
+      const spawn = (_args: string[], _opts?: unknown) => ({
+        exitCode: 1,
+        stdout: { async text() { return "" } },
+        stderr: { async text() { return "not a git repo" } },
+        exited: Promise.resolve(1),
+      })
+
+      await expect(
+        pushReview("/repo", 1, samplePayload, spawn as unknown as typeof Bun.spawn)
+      ).rejects.toThrow()
     })
 
     it("throws on non-zero gh exit code", async () => {
