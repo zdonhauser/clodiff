@@ -80,6 +80,7 @@ Worked example:
 2. Identify the file path, the absolute line number, and the side:
    - `"RIGHT"` — new-file side (added lines, context in the new file)
    - `"LEFT"` — old-file side (removed lines, context in the old file)
+   - **Important:** only comment on lines that actually appear in the diff output. Lines outside the hunk context windows (more than ~3 lines from any changed line) are invisible in the viewer and will be marked `is_outdated` on the next re-anchor.
 3. Read the exact text of the target line and trim it — this becomes `line_content`.
 4. Get the current HEAD commit: `git rev-parse HEAD`.
 5. Generate a UUID: `crypto.randomUUID()`.
@@ -136,6 +137,7 @@ The `load-session.js` hook (installed by `clodiff --install-hooks`) injects the 
 - **Do NOT emit comments without `line_content`.** Without it, comments cannot be re-anchored after commits.
 - **Do NOT emit a comment without a UUID `id` field.** The viewer and reply system depend on stable IDs.
 - **Do NOT use relative line numbers.** Always use absolute line numbers (the actual line number in the file, as shown by the diff hunk offsets).
+- **Do NOT comment on lines outside the diff hunk context.** Only lines that appear in `git diff` output are visible in the viewer. A comment on a line not in any hunk will be invisible and immediately marked `is_outdated` on the next re-anchor.
 - **Do NOT guess the port.** Always read it from `session.json`.
 
 ---

@@ -83,7 +83,12 @@ export async function loadSession(repoDir: string): Promise<SessionFile | null> 
     return null
   }
   const raw = await readFile(path, "utf-8")
-  const data = JSON.parse(raw)
+  let data: Record<string, unknown>
+  try {
+    data = JSON.parse(raw)
+  } catch {
+    throw new Error(`session.json is corrupted (invalid JSON). Delete .review/session.json and rerun clodiff.`)
+  }
   if (data.version !== 1) {
     throw new Error("Unsupported session version: " + data.version)
   }

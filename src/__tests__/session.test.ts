@@ -55,7 +55,7 @@ describe("session", () => {
       await mkdir(reviewDir, { recursive: true })
       await writeFile(join(reviewDir, "session.json"), "{ not valid json }")
 
-      await expect(loadSession(tmpDir)).rejects.toThrow()
+      await expect(loadSession(tmpDir)).rejects.toThrow(/corrupted/)
     })
 
     it("throws when version is not 1", async () => {

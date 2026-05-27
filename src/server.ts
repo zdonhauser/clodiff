@@ -131,6 +131,10 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
                 if (!session.reviews || session.reviews.length === 0) {
                   return new Response("No reviews in session", { status: 400 })
                 }
+                const validEvents = ["COMMENT", "APPROVE", "REQUEST_CHANGES"]
+                if (!validEvents.includes(body.event)) {
+                  return new Response(`Invalid event. Must be one of: ${validEvents.join(", ")}`, { status: 400 })
+                }
                 // Update the most recent review's event
                 session.reviews[session.reviews.length - 1].event = body.event as "COMMENT" | "APPROVE" | "REQUEST_CHANGES"
                 session.updated_at = new Date().toISOString()
