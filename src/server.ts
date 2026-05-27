@@ -1,7 +1,8 @@
 import { join } from "path"
 import path from "path"
-import { existsSync } from "fs"
+import { existsSync, readFileSync, writeFileSync } from "fs"
 import { watch, mkdirSync } from "fs"
+import type { SessionFile, ReplyEntry } from "./session"
 
 export interface ServerOptions {
   port: number
@@ -52,6 +53,113 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
                 return new Response("Invalid JSON", { status: 400 })
               }
             })
+          }
+
+          // GET /session — return current session.json
+          if (url.pathname === "/session" && req.method === "GET") {
+            const sessionPath = join(repoDir, ".review", "session.json")
+            if (!existsSync(sessionPath)) {
+              return new Response("Not Found", { status: 404 })
+            }
+            try {
+              const raw = readFileSync(sessionPath, "utf-8")
+              return new Response(raw, {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+              })
+            } catch {
+              return new Response("Internal Server Error", { status: 500 })
+            }
+          }
+
+          // POST /reply — append a reply to replies.json
+          if (url.pathname === "/reply" && req.method === "POST") {
+            return req.json().then((body: { comment_id: string; body: string }) => {
+              try {
+                const repliesPath = join(repoDir, ".review", "replies.json")
+                let replies: ReplyEntry[] = []
+                if (existsSync(repliesPath)) {
+                  const raw = readFileSync(repliesPath, "utf-8")
+                  replies = JSON.parse(raw) as ReplyEntry[]
+                }
+                const entry: ReplyEntry = {
+                  id: crypto.randomUUID(),
+                  comment_id: body.comment_id,
+                  body: body.body,
+                  created_at: new Date().toISOString(),
+                }
+                replies.push(entry)
+                writeFileSync(repliesPath, JSON.stringify(replies, null, 2))
+                return new Response(JSON.stringify(entry), {
+                  status: 200,
+                  headers: { "Content-Type": "application/json" },
+                })
+              } catch {
+                return new Response("Internal Server Error", { status: 500 })
+              }
+            }).catch(() => new Response("Invalid JSON", { status: 400 }))
+          }
+
+          // POST /review/event — update review event in session.json
+          if (url.pathname === "/review/event" && req.method === "POST") {
+            return req.json().then((body: { event: string }) => {
+              try {
+                const sessionPath = join(repoDir, ".review", "session.json")
+                if (!existsSync(sessionPath)) {
+                  return new Response("Not Found", { status: 404 })
+                }
+                const raw = readFileSync(sessionPath, "utf-8")
+                const session = JSON.parse(raw) as SessionFile
+                // Update the most recent review's event or create a new one
+                if (session.reviews && session.reviews.length > 0) {
+                  session.reviews[session.reviews.length - 1].event = body.event as "COMMENT" | "APPROVE" | "REQUEST_CHANGES"
+                }
+                session.updated_at = new Date().toISOString()
+                writeFileSync(sessionPath, JSON.stringify(session, null, 2))
+                return new Response("OK", { status: 200 })
+              } catch {
+                return new Response("Internal Server Error", { status: 500 })
+              }
+            }).catch(() => new Response("Invalid JSON", { status: 400 }))
+          }
+
+          // POST /push — push review to GitHub
+          if (url.pathname === "/push" && req.method === "POST") {
+            return (async () => {
+              try {
+                const sessionPath = join(repoDir, ".review", "session.json")
+                if (!existsSync(sessionPath)) {
+                  return new Response("No session found", { status: 404 })
+                }
+                const raw = readFileSync(sessionPath, "utf-8")
+                const session = JSON.parse(raw) as SessionFile
+
+                const { checkAuth, findOpenPR, buildReviewPayload, pushReview } = await import("./github")
+
+                const authed = await checkAuth()
+                if (!authed) {
+                  return new Response("Not authenticated with GitHub", { status: 401 })
+                }
+
+                const prNumber = session.pr_number ?? await findOpenPR(repoDir)
+                if (!prNumber) {
+                  return new Response("No open PR found", { status: 404 })
+                }
+
+                if (!session.reviews || session.reviews.length === 0) {
+                  return new Response("No reviews to push", { status: 400 })
+                }
+
+                const review = session.reviews[session.reviews.length - 1]
+                const payload = buildReviewPayload(review)
+                await pushReview(repoDir, prNumber, payload)
+
+                return new Response("OK", { status: 200 })
+              } catch (err: unknown) {
+                const msg = err instanceof Error ? err.message : "Unknown error"
+                return new Response(msg, { status: 500 })
+              }
+            })()
           }
 
           // Static file serving

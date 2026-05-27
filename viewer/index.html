@@ -1,1 +1,114 @@
-<!-- placeholder -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>clodiff</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+      --color-bg: #ffffff;
+      --color-canvas-subtle: #f6f8fa;
+      --color-border-default: #d0d7de;
+      --color-border-muted: #d8dee4;
+      --color-fg-default: #24292f;
+      --color-fg-muted: #57606a;
+      --color-fg-subtle: #6e7781;
+
+      --color-added-bg: #e6ffec;
+      --color-added-word-bg: #abf2bc;
+      --color-added-gutter: #57ab5a;
+      --color-removed-bg: #ffebe9;
+      --color-removed-word-bg: #ffc1ba;
+      --color-removed-gutter: #e5534b;
+
+      --color-accent-fg: #0969da;
+      --color-accent-emphasis: #0969da;
+      --color-success-fg: #1a7f37;
+      --color-attention-fg: #9a6700;
+      --color-danger-fg: #cf222e;
+
+      --color-severity-error: #cf222e;
+      --color-severity-warning: #9a6700;
+      --color-severity-suggestion: #0969da;
+      --color-severity-note: #6e7781;
+
+      --color-outdated-bg: #9a6700;
+
+      --radius-sm: 4px;
+      --radius-md: 6px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --color-bg: #0d1117;
+        --color-canvas-subtle: #161b22;
+        --color-border-default: #30363d;
+        --color-border-muted: #21262d;
+        --color-fg-default: #e6edf3;
+        --color-fg-muted: #8b949e;
+        --color-fg-subtle: #6e7781;
+
+        --color-added-bg: #0f2d1a;
+        --color-added-word-bg: #1a4828;
+        --color-added-gutter: #3fb950;
+        --color-removed-bg: #2d1212;
+        --color-removed-word-bg: #5a1e1e;
+        --color-removed-gutter: #f85149;
+
+        --color-accent-fg: #58a6ff;
+        --color-accent-emphasis: #1f6feb;
+        --color-success-fg: #3fb950;
+        --color-attention-fg: #d29922;
+        --color-danger-fg: #f85149;
+
+        --color-severity-error: #f85149;
+        --color-severity-warning: #d29922;
+        --color-severity-suggestion: #58a6ff;
+        --color-severity-note: #8b949e;
+
+        --color-outdated-bg: #9a6700;
+      }
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--color-bg);
+      color: var(--color-fg-default);
+      font-family: var(--font-ui);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    #app {
+      min-height: 100%;
+    }
+
+    /* Scrollbar styling */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--color-border-default); border-radius: 3px; }
+
+    /* Global link styling */
+    a { color: var(--color-accent-fg); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Button base */
+    button {
+      font-family: var(--font-ui);
+      cursor: pointer;
+    }
+
+    /* Monospace code */
+    code, pre { font-family: var(--font-mono); }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
