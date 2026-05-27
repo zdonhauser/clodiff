@@ -1,7 +1,7 @@
 import { readFile, writeFile, mkdir, copyFile } from "fs/promises"
 import { join, dirname } from "path"
 import { existsSync } from "fs"
-import { spawnSync, execSync } from "child_process"
+import { spawnSync } from "child_process"
 import { parseDiff } from "./diff-parser"
 import { loadSession, saveSession } from "./session"
 import type { SessionFile, Review } from "./session"
@@ -43,6 +43,7 @@ export function parseArgs(argv: string[]): CliArgs {
       i++
     } else if (arg === "--port") {
       args.port = parseInt(nextValue(argv, i, "--port"), 10)
+      if (isNaN(args.port)) throw new Error("--port must be a valid number")
       i++
     } else if (arg === "--resume") {
       args.resume = true
@@ -64,6 +65,10 @@ export function parseArgs(argv: string[]): CliArgs {
     }
 
     i++
+  }
+
+  if ((args.from && !args.to) || (!args.from && args.to)) {
+    throw new Error("--from and --to must be provided together")
   }
 
   return args
@@ -230,9 +235,6 @@ export async function main(): Promise<void> {
     }
     session.current_commit = headCommit
   }
-
-  // Store port in session
-  session.port = args.port
 
   // Start the server
   const { port, server: _server } = await startServer({

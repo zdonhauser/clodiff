@@ -106,6 +106,18 @@ describe("CLI args", () => {
     expect(args.resume).toBe(true)
     expect(args.stdin).toBe(true)
   })
+
+  it("--from without --to throws", () => {
+    expect(() => parseArgs(["--from", "abc123"])).toThrow("--from and --to must be provided together")
+  })
+
+  it("--to without --from throws", () => {
+    expect(() => parseArgs(["--to", "def456"])).toThrow("--from and --to must be provided together")
+  })
+
+  it("--port abc throws 'must be a valid number'", () => {
+    expect(() => parseArgs(["--port", "abc"])).toThrow("--port must be a valid number")
+  })
 })
 
 describe("installHooks", () => {
