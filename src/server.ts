@@ -8,7 +8,7 @@ export interface ServerOptions {
   port: number
   repoDir: string
   viewerDir: string
-  getInitPayload?: () => unknown
+  getInitPayload?: () => unknown | Promise<unknown>
 }
 
 export interface StartServerResult {
@@ -31,7 +31,7 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
 
       server = Bun.serve({
         port: currentPort,
-        fetch(req, server) {
+        async fetch(req, server) {
           const url = new URL(req.url)
 
           // WebSocket upgrade
@@ -62,7 +62,7 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
               return new Response("No init payload available", { status: 404 })
             }
             try {
-              const payload = getInitPayload()
+              const payload = await Promise.resolve(getInitPayload())
               return new Response(JSON.stringify(payload), {
                 status: 200,
                 headers: { "Content-Type": "application/json" },
@@ -213,12 +213,11 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
           open(ws) {
             wsClients.add(ws as unknown as WebSocket)
             if (getInitPayload) {
-              try {
-                const payload = getInitPayload()
+              Promise.resolve(getInitPayload()).then((payload) => {
                 ws.send(JSON.stringify(payload))
-              } catch {
+              }).catch(() => {
                 // Don't crash on init payload errors
-              }
+              })
             }
           },
           close(ws) {

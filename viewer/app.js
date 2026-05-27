@@ -71,6 +71,17 @@ function App() {
       if (!res.ok) return
       const data = await res.json()
       setSession(data)
+      // Flatten comments from all reviews and update state
+      const flatComments = (data.reviews || []).flatMap((r) => r.comments || [])
+      setComments(flatComments)
+      // Auto-expand files that now have comments
+      setExpandedFiles((prev) => {
+        const updated = { ...prev }
+        for (const c of flatComments) {
+          if (!updated[c.path]) updated[c.path] = true
+        }
+        return updated
+      })
     } catch {
       // Session may not exist yet
     }

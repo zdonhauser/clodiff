@@ -241,12 +241,15 @@ export async function main(): Promise<void> {
     port: args.port,
     repoDir,
     viewerDir: join(dirname(import.meta.path), "..", "viewer"),
-    getInitPayload: () => ({
-      type: "init",
-      diff: parsedDiff,
-      comments: session.reviews.flatMap(r => r.comments),
-      session,
-    }),
+    getInitPayload: async () => {
+      const freshSession = (await loadSession(repoDir)) ?? session
+      return {
+        type: "init",
+        diff: parsedDiff,
+        comments: freshSession.reviews.flatMap((r) => r.comments),
+        session: freshSession,
+      }
+    },
   })
 
   // Update session with actual port (may differ if port was taken)
