@@ -81,6 +81,18 @@ describe("CLI args", () => {
     expect(() => parseArgs(["--unknown-flag"])).toThrow("Unknown flag: --unknown-flag")
   })
 
+  it("--port without value throws", () => {
+    expect(() => parseArgs(["--port"])).toThrow("--port requires a value")
+  })
+
+  it("--base without value throws", () => {
+    expect(() => parseArgs(["--base"])).toThrow("--base requires a value")
+  })
+
+  it("--port followed by another flag throws", () => {
+    expect(() => parseArgs(["--port", "--base"])).toThrow("--port requires a value")
+  })
+
   it("parses port as integer", () => {
     const args = parseArgs(["--port", "8080"])
     expect(args.port).toBe(8080)
@@ -138,5 +150,29 @@ describe("installHooks", () => {
     expect(result.hooks.SessionStart).toBeDefined()
     expect(result.hooks.UserPromptSubmit[0].hooks[0].command).toContain("inject-replies.js")
     expect(result.hooks.SessionStart[0].hooks[0].command).toContain("load-session.js")
+  })
+
+  it("appends to existing UserPromptSubmit array instead of replacing it", async () => {
+    const settingsDir = join(tmpDir, ".claude")
+    await mkdir(settingsDir, { recursive: true })
+
+    const existingSettings = {
+      hooks: {
+        UserPromptSubmit: [
+          { hooks: [{ type: "command", command: "echo existing-hook" }] },
+        ],
+      },
+    }
+    await writeFile(join(settingsDir, "settings.json"), JSON.stringify(existingSettings, null, 2))
+
+    await installHooks(tmpDir)
+
+    const raw = await Bun.file(join(settingsDir, "settings.json")).text()
+    const result = JSON.parse(raw)
+
+    expect(Array.isArray(result.hooks.UserPromptSubmit)).toBe(true)
+    expect(result.hooks.UserPromptSubmit).toHaveLength(2)
+    expect(result.hooks.UserPromptSubmit[0].hooks[0].command).toBe("echo existing-hook")
+    expect(result.hooks.UserPromptSubmit[1].hooks[0].command).toContain("inject-replies.js")
   })
 })
