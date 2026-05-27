@@ -1,8 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test"
-import { mkdtemp, rm, writeFile, mkdir } from "fs/promises"
-import { tmpdir } from "os"
-import { join } from "path"
-import { parseArgs, installHooks } from "../cli"
+import { describe, it, expect } from "bun:test"
+import { parseArgs } from "../cli"
 
 describe("CLI args", () => {
   it("defaults base to empty string (browse mode)", () => {
@@ -67,16 +64,6 @@ describe("CLI args", () => {
     expect(args.to).toBeUndefined()
   })
 
-  it("accepts --install-hooks flag", () => {
-    const args = parseArgs(["--install-hooks"])
-    expect(args.installHooks).toBe(true)
-  })
-
-  it("defaults installHooks to false", () => {
-    const args = parseArgs([])
-    expect(args.installHooks).toBe(false)
-  })
-
   it("throws on unknown flag", () => {
     expect(() => parseArgs(["--unknown-flag"])).toThrow("Unknown flag: --unknown-flag")
   })
@@ -117,78 +104,5 @@ describe("CLI args", () => {
 
   it("--port abc throws 'must be a valid number'", () => {
     expect(() => parseArgs(["--port", "abc"])).toThrow("--port must be a valid number")
-  })
-})
-
-describe("installHooks", () => {
-  let tmpDir: string
-
-  beforeEach(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "clodiff-cli-test-"))
-  })
-
-  afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true })
-  })
-
-  it("preserves existing PreToolUse hook alongside new UserPromptSubmit and SessionStart entries", async () => {
-    const settingsDir = join(tmpDir, ".claude")
-    await mkdir(settingsDir, { recursive: true })
-
-    const existingSettings = {
-      someOtherKey: "value",
-      hooks: {
-        PreToolUse: [
-          { hooks: [{ type: "command", command: "echo pre-tool-use" }] },
-        ],
-      },
-    }
-    await writeFile(join(settingsDir, "settings.json"), JSON.stringify(existingSettings, null, 2))
-
-    await installHooks(tmpDir)
-
-    const raw = await Bun.file(join(settingsDir, "settings.json")).text()
-    const result = JSON.parse(raw)
-
-    // Original key preserved
-    expect(result.someOtherKey).toBe("value")
-
-    // Pre-existing hook event preserved
-    expect(result.hooks.PreToolUse).toBeDefined()
-    expect(result.hooks.PreToolUse[0].hooks[0].command).toBe("echo pre-tool-use")
-
-    // New hook events added
-    expect(result.hooks.UserPromptSubmit).toBeDefined()
-    expect(result.hooks.SessionStart).toBeDefined()
-    expect(result.hooks.UserPromptSubmit[0].hooks[0].command).toContain("inject-replies.js")
-    expect(result.hooks.SessionStart[0].hooks[0].command).toContain("load-session.js")
-
-    // Skill installed
-    const { existsSync } = await import("fs")
-    expect(existsSync(join(settingsDir, "skills", "clodiff.md"))).toBe(true)
-  })
-
-  it("appends to existing UserPromptSubmit array instead of replacing it", async () => {
-    const settingsDir = join(tmpDir, ".claude")
-    await mkdir(settingsDir, { recursive: true })
-
-    const existingSettings = {
-      hooks: {
-        UserPromptSubmit: [
-          { hooks: [{ type: "command", command: "echo existing-hook" }] },
-        ],
-      },
-    }
-    await writeFile(join(settingsDir, "settings.json"), JSON.stringify(existingSettings, null, 2))
-
-    await installHooks(tmpDir)
-
-    const raw = await Bun.file(join(settingsDir, "settings.json")).text()
-    const result = JSON.parse(raw)
-
-    expect(Array.isArray(result.hooks.UserPromptSubmit)).toBe(true)
-    expect(result.hooks.UserPromptSubmit).toHaveLength(2)
-    expect(result.hooks.UserPromptSubmit[0].hooks[0].command).toBe("echo existing-hook")
-    expect(result.hooks.UserPromptSubmit[1].hooks[0].command).toContain("inject-replies.js")
   })
 })

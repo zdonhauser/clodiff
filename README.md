@@ -52,25 +52,20 @@ Options:
   --patch <path>     Read diff from a patch file
   --port <number>    Port to listen on (default: 7777)
   --resume           Resume existing session without warning
-  --install-hooks    Install Claude Code hooks into .claude/settings.json
 ```
 
 ---
 
 ## Claude Code integration
 
-Install the hooks and skill once per repo:
+Install the **clodiff plugin** from [clogins](https://github.com/zdonhauser/clogins) — it teaches Claude how to start clodiff, navigate the viewer, highlight lines, leave inline annotations, and run full code reviews.
 
-```bash
-clodiff --install-hooks
+```
+/plugin marketplace add github:zdonhauser/clogins
+/plugin install clodiff@clogins
 ```
 
-This installs:
-- **Hooks** — injects pending annotation replies into each prompt, and loads session state at startup
-- **`clodiff` skill** — teaches Claude how and when to use the viewer (scroll, highlight, annotate)
-- **`clodiff-review` skill** — a built-in PR review workflow that leaves inline annotations and supports Approve / Request Changes / Push to GitHub
-
-Once installed, Claude will detect an active clodiff session and use the viewer during code discussions. Ask it to review your diff and it will annotate the code inline. See `CLAUDE.md` for the full protocol.
+Once installed, Claude will detect an active clodiff session automatically and use the viewer during code discussions. It will also bootstrap clodiff for you (including checking for bun) if the server isn't running yet.
 
 ---
 
