@@ -7,6 +7,8 @@ import { scrollToLine } from "./utils/anchoring.js"
 
 import { Header } from "./components/Header.js"
 import { FileList } from "./components/FileList.js"
+import { FileSidebar } from "./components/FileSidebar.js"
+import { FileViewer } from "./components/FileViewer.js"
 
 // ── Storage helpers ────────────────────────────────────────────────────────
 
@@ -24,6 +26,21 @@ function saveViewMode(mode) {
   } catch {}
 }
 
+function loadSidebarOpen() {
+  try {
+    const v = localStorage.getItem("clodiff_sidebarOpen")
+    return v === null ? true : v === "true"
+  } catch {
+    return true
+  }
+}
+
+function saveSidebarOpen(open) {
+  try {
+    localStorage.setItem("clodiff_sidebarOpen", String(open))
+  } catch {}
+}
+
 // ── App component ──────────────────────────────────────────────────────────
 
 function App() {
@@ -33,6 +50,15 @@ function App() {
   const [viewMode, setViewMode] = useState(loadViewMode)
   const [expandedFiles, setExpandedFiles] = useState({})
   const [wsStatus, setWsStatus] = useState("disconnected")
+  const [sidebarOpen, setSidebarOpen] = useState(loadSidebarOpen)
+  const [allFilesMode, setAllFilesMode] = useState(() => {
+    try { return localStorage.getItem("clodiff_allFiles") === "true" } catch { return false }
+  })
+  const [textSize, setTextSize] = useState(() => {
+    try { return localStorage.getItem("clodiff_textSize") || "md" } catch { return "md" }
+  })
+  const [openFile, setOpenFile] = useState(null) // { path, isDiff } for non-diff file panel
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" ? window.innerWidth < 768 : false)
 
   // Map from file path → DOM element (for scrollToLine)
   const fileRefs = useRef({})
@@ -123,6 +149,31 @@ function App() {
         break
       }
 
+      case "highlight": {
+        const { path, line, duration = 4000, scroll = true } = msg
+        if (!path || line == null) break
+        if (scroll) {
+          scrollToLine(path, line, {
+            expandFile,
+            getFileRef: (p) => fileRefs.current[p],
+          })
+        }
+        // Use DOM class manipulation — avoids prop drilling through the entire tree
+        const applyHighlight = () => {
+          const el = document.querySelector(`[data-path="${CSS.escape(path)}"][data-line="${line}"]`)
+          if (!el) return
+          el.classList.remove("clodiff-highlight", "clodiff-fading")
+          // Force reflow so the transition re-triggers if already highlighted
+          void el.offsetHeight
+          el.classList.add("clodiff-highlight")
+          setTimeout(() => el.classList.add("clodiff-fading"), Math.max(duration - 700, 300))
+          setTimeout(() => el.classList.remove("clodiff-highlight", "clodiff-fading"), duration)
+        }
+        // Small delay to allow scroll + expand to render the target line first
+        setTimeout(applyHighlight, scroll ? 150 : 0)
+        break
+      }
+
       case "comment_add":
       case "comment_update": {
         // Server may push comment updates
@@ -162,6 +213,61 @@ function App() {
     saveViewMode(mode)
   }, [])
 
+  const handleToggleSidebar = useCallback(() => {
+    setSidebarOpen((prev) => {
+      const next = !prev
+      saveSidebarOpen(next)
+      return next
+    })
+  }, [])
+
+  const handleAllFilesChange = useCallback((v) => {
+    setAllFilesMode(v)
+    try { localStorage.setItem("clodiff_allFiles", String(v)) } catch {}
+    if (!v) setOpenFile(null)
+  }, [])
+
+  const handleTextSizeChange = useCallback((size) => {
+    setTextSize(size)
+    try { localStorage.setItem("clodiff_textSize", size) } catch {}
+    document.documentElement.setAttribute("data-text-size", size)
+  }, [])
+
+  // Apply stored text size on mount
+  useEffect(() => {
+    document.documentElement.setAttribute("data-text-size", textSize)
+  }, [])
+
+  // Track mobile breakpoint
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener("resize", handler)
+    return () => window.removeEventListener("resize", handler)
+  }, [])
+
+  const closeSidebarOnMobile = useCallback(() => {
+    if (isMobile) {
+      setSidebarOpen(false)
+      saveSidebarOpen(false)
+    }
+  }, [isMobile])
+
+  const handleSidebarNavigate = useCallback((filePath, isDiff) => {
+    closeSidebarOnMobile()
+    if (!isDiff) {
+      setOpenFile({ path: filePath, isDiff: false })
+      return
+    }
+    setOpenFile(null)
+    expandFile(filePath)
+    setTimeout(() => {
+      scrollToLine(filePath, null, {
+        expandFile,
+        getFileRef: (p) => fileRefs.current[p],
+      })
+    }, 50)
+  }, [expandFile, closeSidebarOnMobile])
+
   // Resolve a comment (optimistic UI update + POST)
   const handleResolve = useCallback(async (commentId) => {
     // Optimistic update
@@ -180,26 +286,55 @@ function App() {
   const fileCount = diff.length
 
   return html`
-    <div style=${{ minHeight: "100vh", background: "var(--color-bg)" }}>
+    <div style=${{ height: "100%", background: "var(--color-bg)", display: "flex", flexDirection: "column" }}>
       <${Header}
         session=${session}
         fileCount=${fileCount}
         wsStatus=${wsStatus}
         viewMode=${viewMode}
         onViewMode=${handleViewMode}
+        sidebarOpen=${sidebarOpen}
+        onToggleSidebar=${handleToggleSidebar}
       />
-      <main style=${{ maxWidth: "100%", margin: "0 auto" }}>
-        <${FileList}
+      <div style=${{ display: "flex", flex: 1, overflow: "hidden", position: "relative" }}>
+        ${sidebarOpen && isMobile && html`
+          <div
+            onClick=${handleToggleSidebar}
+            style=${{
+              position: "fixed",
+              inset: 0,
+              zIndex: 299,
+              background: "rgba(0,0,0,0.4)",
+            }}
+          />
+        `}
+        <${FileSidebar}
+          open=${sidebarOpen}
           diff=${diff}
           comments=${comments}
-          expandedFiles=${expandedFiles}
-          onToggle=${handleToggle}
-          viewMode=${viewMode}
-          onReply=${handleReply}
-          onResolve=${handleResolve}
-          onFileRef=${handleFileRef}
+          onNavigate=${handleSidebarNavigate}
+          onClose=${handleToggleSidebar}
+          allFilesMode=${allFilesMode}
+          onAllFilesChange=${handleAllFilesChange}
+          textSize=${textSize}
+          onTextSizeChange=${handleTextSizeChange}
         />
-      </main>
+        <main style=${{ flex: 1, overflow: "auto", minWidth: 0 }}>
+          ${openFile
+            ? html`<${FileViewer} path=${openFile.path} onClose=${() => setOpenFile(null)} />`
+            : html`<${FileList}
+                diff=${diff}
+                comments=${comments}
+                expandedFiles=${expandedFiles}
+                onToggle=${handleToggle}
+                viewMode=${viewMode}
+                onReply=${handleReply}
+                onResolve=${handleResolve}
+                onFileRef=${handleFileRef}
+              />`
+          }
+        </main>
+      </div>
     </div>
   `
 }

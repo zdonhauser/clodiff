@@ -27,7 +27,7 @@ function nextValue(argv: string[], i: number, flag: string): string {
 
 export function parseArgs(argv: string[]): CliArgs {
   const args: CliArgs = {
-    base: "main",
+    base: "",
     port: 7777,
     resume: false,
     stdin: false,
@@ -123,6 +123,13 @@ export async function installHooks(repoDir: string): Promise<void> {
     join(hooksSourceDir, "load-session.js"),
     join(hooksTargetDir, "load-session.js")
   )
+
+  // Install skills into .claude/skills/
+  const skillsTargetDir = join(settingsDir, "skills")
+  await mkdir(skillsTargetDir, { recursive: true })
+  const skillsSourceDir = join(dirname(import.meta.path), "..", "skills")
+  await copyFile(join(skillsSourceDir, "clodiff.md"), join(skillsTargetDir, "clodiff.md"))
+  await copyFile(join(skillsSourceDir, "review.md"), join(skillsTargetDir, "clodiff-review.md"))
 }
 
 async function readStdin(): Promise<string> {
@@ -143,6 +150,32 @@ function getHeadCommit(repoDir: string): string {
   } catch {
     return "unknown"
   }
+}
+
+function runGitDiff(repoDir: string, from: string, to: string): string {
+  const result = spawnSync("git", ["diff", from, to], {
+    cwd: repoDir,
+    encoding: "utf-8",
+    maxBuffer: 50 * 1024 * 1024,
+  })
+  if (result.error) throw result.error
+  return result.stdout
+}
+
+function getRefs(repoDir: string) {
+  const result = spawnSync(
+    "git",
+    ["for-each-ref", "refs/heads", "--format=%(refname:short)|%(objectname:short)|%(contents:subject)|%(committerdate:relative)", "--sort=-committerdate"],
+    { cwd: repoDir, encoding: "utf-8" }
+  )
+  const lines = (result.stdout || "").trim().split("\n").filter(Boolean)
+  return lines.map((line) => {
+    const [name, sha, ...rest] = line.split("|")
+    // Last segment is the date, everything before is the subject
+    const date = rest[rest.length - 1] ?? ""
+    const subject = rest.slice(0, -1).join("|")
+    return { name, sha, subject, date }
+  })
 }
 
 function openBrowser(url: string): void {
@@ -168,26 +201,32 @@ export async function main(): Promise<void> {
 
   // --- Determine diff text ---
   let diffText: string
+  let currentFrom: string | null = null
+  let currentTo: string | null = null
 
   if (args.stdin) {
     diffText = await readStdin()
   } else if (args.patch) {
     diffText = await readFile(args.patch, "utf-8")
   } else if (args.from && args.to) {
-    const result = spawnSync("git", ["diff", args.from, args.to], {
-      cwd: repoDir,
-      encoding: "utf-8",
-    })
-    diffText = result.stdout
-  } else {
+    currentFrom = args.from
+    currentTo = args.to
+    diffText = runGitDiff(repoDir, args.from, args.to)
+  } else if (args.base) {
+    currentFrom = args.base
+    currentTo = "HEAD"
     const result = spawnSync("git", ["diff", args.base], {
       cwd: repoDir,
       encoding: "utf-8",
     })
     diffText = result.stdout
+  } else {
+    // Browse mode: no diff, just show the repo
+    diffText = ""
   }
 
-  const parsedDiff = parseDiff(diffText)
+  // Mutable diff state — updated on /rediff
+  const diffState = { parsed: parseDiff(diffText), from: currentFrom, to: currentTo }
 
   // --- Load or create session ---
   const existingSession = await loadSession(repoDir)
@@ -210,7 +249,6 @@ export async function main(): Promise<void> {
       event: "COMMENT",
       comments: [],
       created_at: now,
-      source: "claude-code",
     }
     session = {
       version: 1,
@@ -225,9 +263,9 @@ export async function main(): Promise<void> {
   }
 
   // Re-anchor comments if HEAD changed since last save
-  if (session.current_commit && session.current_commit !== headCommit && parsedDiff.length > 0) {
+  if (session.current_commit && session.current_commit !== headCommit && diffState.parsed.length > 0) {
     const allComments = session.reviews.flatMap(r => r.comments)
-    const reanchored = reanchorComments(allComments, parsedDiff)
+    const reanchored = reanchorComments(allComments, diffState.parsed)
     // Distribute reanchored comments back to reviews (by id)
     const commentMap = new Map(reanchored.map(c => [c.id, c]))
     for (const review of session.reviews) {
@@ -245,9 +283,23 @@ export async function main(): Promise<void> {
       const freshSession = (await loadSession(repoDir)) ?? session
       return {
         type: "init",
-        diff: parsedDiff,
+        diff: diffState.parsed,
         comments: freshSession.reviews.flatMap((r) => r.comments),
-        session: freshSession,
+        session: { ...freshSession, _from: diffState.from, _to: diffState.to },
+      }
+    },
+    getRefs: async () => getRefs(repoDir),
+    onRediff: async (from: string, to: string) => {
+      const text = runGitDiff(repoDir, from, to)
+      diffState.parsed = parseDiff(text)
+      diffState.from = from
+      diffState.to = to
+      const freshSession = (await loadSession(repoDir)) ?? session
+      return {
+        type: "init",
+        diff: diffState.parsed,
+        comments: freshSession.reviews.flatMap((r) => r.comments),
+        session: { ...freshSession, _from: from, _to: to },
       }
     },
   })

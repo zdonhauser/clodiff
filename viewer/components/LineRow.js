@@ -43,9 +43,8 @@ export function LineRow({ line, viewMode, side, path, onClick }) {
     display: "table-row",
     background: bgColor,
     fontFamily: "var(--font-mono)",
-    fontSize: "12px",
-    lineHeight: "20px",
-    minHeight: "20px",
+    fontSize: "var(--font-code-size)",
+    lineHeight: "1.7",
   }
 
   const gutterStyle = {
@@ -66,7 +65,7 @@ export function LineRow({ line, viewMode, side, path, onClick }) {
     minWidth: "50px",
     whiteSpace: "nowrap",
     cursor: onClick ? "pointer" : "default",
-    fontSize: "12px",
+    fontSize: "var(--font-code-size)",
   }
 
   const prefixStyle = {
@@ -82,7 +81,7 @@ export function LineRow({ line, viewMode, side, path, onClick }) {
     width: "16px",
     minWidth: "16px",
     textAlign: "center",
-    fontSize: "12px",
+    fontSize: "var(--font-code-size)",
   }
 
   const contentStyle = {
@@ -91,7 +90,7 @@ export function LineRow({ line, viewMode, side, path, onClick }) {
     whiteSpace: "pre",
     tabSize: 4,
     width: "100%",
-    fontSize: "12px",
+    fontSize: "var(--font-code-size)",
   }
 
   const dataAttrs = {}

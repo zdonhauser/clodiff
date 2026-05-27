@@ -4,11 +4,20 @@ import { existsSync, readFileSync, writeFileSync } from "fs"
 import { watch, mkdirSync } from "fs"
 import type { SessionFile, ReplyEntry } from "./session"
 
+export interface RefEntry {
+  name: string
+  sha: string
+  subject: string
+  date: string
+}
+
 export interface ServerOptions {
   port: number
   repoDir: string
   viewerDir: string
   getInitPayload?: () => unknown | Promise<unknown>
+  getRefs?: () => Promise<RefEntry[]>
+  onRediff?: (from: string, to: string) => Promise<unknown>
 }
 
 export interface StartServerResult {
@@ -17,7 +26,7 @@ export interface StartServerResult {
 }
 
 export async function startServer(options: ServerOptions): Promise<StartServerResult> {
-  const { repoDir, viewerDir, getInitPayload } = options
+  const { repoDir, viewerDir, getInitPayload, getRefs, onRediff } = options
   const wsClients = new Set<WebSocket>()
 
   // Try to start on the specified port, auto-increment if taken
@@ -117,17 +126,14 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
             }).catch(() => new Response("Invalid JSON", { status: 400 }))
           }
 
-          // POST /review/event — update review event in session.json
+          // POST /review/event — set the event (APPROVE / REQUEST_CHANGES / COMMENT) on the current review
           if (url.pathname === "/review/event" && req.method === "POST") {
             return req.json().then((body: { event: string }) => {
               try {
                 const sessionPath = join(repoDir, ".review", "session.json")
-                if (!existsSync(sessionPath)) {
-                  return new Response("Not Found", { status: 404 })
-                }
+                if (!existsSync(sessionPath)) return new Response("Not Found", { status: 404 })
                 const raw = readFileSync(sessionPath, "utf-8")
                 const session = JSON.parse(raw) as SessionFile
-                // Reject if there are no reviews to update
                 if (!session.reviews || session.reviews.length === 0) {
                   return new Response("No reviews in session", { status: 400 })
                 }
@@ -135,7 +141,6 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
                 if (!validEvents.includes(body.event)) {
                   return new Response(`Invalid event. Must be one of: ${validEvents.join(", ")}`, { status: 400 })
                 }
-                // Update the most recent review's event
                 session.reviews[session.reviews.length - 1].event = body.event as "COMMENT" | "APPROVE" | "REQUEST_CHANGES"
                 session.updated_at = new Date().toISOString()
                 writeFileSync(sessionPath, JSON.stringify(session, null, 2))
@@ -146,43 +151,101 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
             }).catch(() => new Response("Invalid JSON", { status: 400 }))
           }
 
-          // POST /push — push review to GitHub
+          // POST /push — push annotations to GitHub as a PR review
           if (url.pathname === "/push" && req.method === "POST") {
             return (async () => {
               try {
                 const sessionPath = join(repoDir, ".review", "session.json")
-                if (!existsSync(sessionPath)) {
-                  return new Response("No session found", { status: 404 })
-                }
+                if (!existsSync(sessionPath)) return new Response("No session found", { status: 404 })
                 const raw = readFileSync(sessionPath, "utf-8")
                 const session = JSON.parse(raw) as SessionFile
-
                 const { checkAuth, findOpenPR, buildReviewPayload, pushReview } = await import("./github")
-
-                const authed = await checkAuth()
-                if (!authed) {
-                  return new Response("Not authenticated with GitHub", { status: 401 })
-                }
-
+                if (!await checkAuth()) return new Response("Not authenticated with GitHub", { status: 401 })
                 const prNumber = session.pr_number ?? await findOpenPR(repoDir)
-                if (!prNumber) {
-                  return new Response("No open PR found", { status: 404 })
-                }
-
+                if (!prNumber) return new Response("No open PR found", { status: 404 })
                 if (!session.reviews || session.reviews.length === 0) {
-                  return new Response("No reviews to push", { status: 400 })
+                  return new Response("No annotations to push", { status: 400 })
                 }
-
                 const review = session.reviews[session.reviews.length - 1]
-                const payload = buildReviewPayload(review)
-                await pushReview(repoDir, prNumber, payload)
-
+                await pushReview(repoDir, prNumber, buildReviewPayload(review))
                 return new Response("OK", { status: 200 })
+              } catch (err: unknown) {
+                return new Response(err instanceof Error ? err.message : "Unknown error", { status: 500 })
+              }
+            })()
+          }
+
+          // GET /file — serve a file from repoDir (read-only)
+          if (url.pathname === "/file" && req.method === "GET") {
+            const filePath = url.searchParams.get("path")
+            if (!filePath) return new Response("path required", { status: 400 })
+            const abs = path.resolve(repoDir, filePath)
+            if (!abs.startsWith(repoDir + path.sep) && abs !== repoDir) {
+              return new Response("Forbidden", { status: 403 })
+            }
+            if (!existsSync(abs)) return new Response("Not Found", { status: 404 })
+            try {
+              return new Response(Bun.file(abs), {
+                headers: { "Content-Type": "text/plain; charset=utf-8" },
+              })
+            } catch {
+              return new Response("Internal Server Error", { status: 500 })
+            }
+          }
+
+          // GET /tree — list all tracked files in repoDir
+          if (url.pathname === "/tree" && req.method === "GET") {
+            const { spawnSync } = await import("child_process")
+            const result = spawnSync("git", ["ls-files"], { cwd: repoDir, encoding: "utf-8" })
+            if (result.error) return new Response("git error", { status: 500 })
+            const files = (result.stdout || "").trim().split("\n").filter(Boolean)
+            return new Response(JSON.stringify(files), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            })
+          }
+
+          // GET /refs — list local branches with commit info
+          if (url.pathname === "/refs" && req.method === "GET") {
+            if (!getRefs) {
+              return new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } })
+            }
+            try {
+              const refs = await getRefs()
+              return new Response(JSON.stringify(refs), {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+              })
+            } catch {
+              return new Response("Internal Server Error", { status: 500 })
+            }
+          }
+
+          // POST /rediff — re-run diff with new from/to refs
+          if (url.pathname === "/rediff" && req.method === "POST") {
+            return req.json().then(async (body: { from: string; to: string }) => {
+              if (!onRediff) {
+                return new Response("Rediff not supported", { status: 501 })
+              }
+              if (!body.from || !body.to) {
+                return new Response("from and to are required", { status: 400 })
+              }
+              try {
+                const payload = await onRediff(body.from, body.to)
+                // Broadcast new init to all WS clients
+                const msg = JSON.stringify(payload)
+                for (const client of wsClients) {
+                  try { client.send(msg) } catch { /* disconnected */ }
+                }
+                return new Response(JSON.stringify(payload), {
+                  status: 200,
+                  headers: { "Content-Type": "application/json" },
+                })
               } catch (err: unknown) {
                 const msg = err instanceof Error ? err.message : "Unknown error"
                 return new Response(msg, { status: 500 })
               }
-            })()
+            }).catch(() => new Response("Invalid JSON", { status: 400 }))
           }
 
           // Static file serving

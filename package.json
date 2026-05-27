@@ -1,6 +1,7 @@
 {
   "name": "clodiff",
   "version": "0.1.0",
+  "description": "A local code viewer for Claude — shared visual context for code discussions",
   "type": "module",
   "bin": {
     "clodiff": "src/cli.ts"

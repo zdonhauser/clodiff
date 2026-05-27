@@ -5,7 +5,7 @@ export interface ReviewComment {
   // Local only
   id: string
   created_at: string
-  source: "claude-code" | "user" | "review-team"
+  source: "claude-code" | "user"
   severity?: "error" | "warning" | "suggestion" | "note"
   resolved?: boolean
   replies?: ReviewComment[]
@@ -28,10 +28,9 @@ export interface Review {
   id: string
   commit_id: string
   body?: string
-  event: "COMMENT" | "APPROVE" | "REQUEST_CHANGES"
+  event?: "COMMENT" | "APPROVE" | "REQUEST_CHANGES"
   comments: ReviewComment[]
   created_at: string
-  source: "claude-code" | "user" | "review-team"
 }
 
 export interface SessionFile {

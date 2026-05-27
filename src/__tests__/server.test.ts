@@ -71,21 +71,15 @@ describe("server", () => {
     })
 
     it("POST /review/event with valid event updates session", async () => {
-      // Create a session.json so the endpoint can operate
       const reviewDir = join(tmpDir, ".review")
       await mkdir(reviewDir, { recursive: true })
       const session = {
-        version: 1,
-        repo: tmpDir,
-        base_branch: "main",
-        head_commit: "abc123",
-        current_commit: "abc123",
-        reviews: [{ id: "r1", commit_id: "abc123", event: "COMMENT", comments: [], created_at: "2025-01-01T00:00:00Z", source: "claude-code" }],
-        created_at: "2025-01-01T00:00:00Z",
-        updated_at: "2025-01-01T00:00:00Z",
+        version: 1, repo: tmpDir, base_branch: "main",
+        head_commit: "abc123", current_commit: "abc123",
+        reviews: [{ id: "r1", commit_id: "abc123", event: "COMMENT", comments: [], created_at: "2025-01-01T00:00:00Z" }],
+        created_at: "2025-01-01T00:00:00Z", updated_at: "2025-01-01T00:00:00Z",
       }
       await writeFile(join(reviewDir, "session.json"), JSON.stringify(session))
-
       const res = await fetch(`http://localhost:${serverResult.port}/review/event`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

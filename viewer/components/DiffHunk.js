@@ -38,7 +38,7 @@ export function DiffHunk({ hunk, comments = [], viewMode, path, onReply, onResol
     background: "#ddf4ff",
     color: "#0969da",
     fontFamily: "var(--font-mono)",
-    fontSize: "12px",
+    fontSize: "var(--font-code-size)",
     borderTop: "1px solid #b6e3ff",
     borderBottom: "1px solid #b6e3ff",
     userSelect: "none",
@@ -48,7 +48,7 @@ export function DiffHunk({ hunk, comments = [], viewMode, path, onReply, onResol
     width: "100%",
     borderCollapse: "collapse",
     fontFamily: "var(--font-mono)",
-    fontSize: "12px",
+    fontSize: "var(--font-code-size)",
     tableLayout: "fixed",
   }
 
