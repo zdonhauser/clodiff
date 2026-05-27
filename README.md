@@ -65,7 +65,7 @@ Install the **clodiff plugin** from [clogins](https://github.com/zdonhauser/clog
 /plugin install clodiff@clogins
 ```
 
-Once installed, Claude will detect an active clodiff session automatically and use the viewer during code discussions. It will also bootstrap clodiff for you (including checking for bun) if the server isn't running yet.
+Once installed, Claude will detect an active clodiff session automatically and use the viewer during code discussions. It will also bootstrap clodiff for you (including checking for bun) if the server isn't running yet. The plugin also installs two hooks: one that injects viewer replies into each prompt so you can reply to annotations inline, and one that loads session state at startup.
 
 ---
 
