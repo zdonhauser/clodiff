@@ -61,20 +61,6 @@ export function DiffHunk({ hunk, comments = [], viewMode, path, onReply, onResol
         <!-- Lines table -->
         <div style=${{ display: "table", width: "100%", borderCollapse: "collapse" }}>
           ${hunk.lines.map((line, i) => {
-            const lineNum = line.newLineNumber ?? line.oldLineNumber
-
-            // Gather comments for this specific line
-            const lineComments = lineNum != null
-              ? comments.filter((c) => {
-                  const commentLine = c.side === "LEFT"
-                    ? (line.type === "removed" || line.type === "context" ? line.oldLineNumber : null)
-                    : (line.type === "added" || line.type === "context" ? line.newLineNumber : null)
-                  return commentLine === c.line
-                })
-              : []
-
-            // Actually use a simpler approach: show comments anchored to newLineNumber for added/context,
-            // and oldLineNumber for removed
             const relevantLineNum =
               line.type === "removed" ? line.oldLineNumber : line.newLineNumber
 
@@ -128,15 +114,31 @@ export function DiffHunk({ hunk, comments = [], viewMode, path, onReply, onResol
         <!-- Left panel (old) -->
         <div style=${{ flex: 1, overflow: "hidden", borderRight: "1px solid var(--color-border-default)" }}>
           <div style=${{ display: "table", width: "100%", borderCollapse: "collapse" }}>
-            ${pairs.map((pair, i) => html`
-              <${LineRow}
-                key=${"l" + i}
-                line=${pair.left}
-                viewMode="side-by-side"
-                side="left"
-                path=${path}
-              />
-            `)}
+            ${pairs.map((pair, i) => {
+              const leftLine = pair.left
+              const leftLineNum = leftLine?.oldLineNumber
+              const leftComments = leftLineNum != null
+                ? comments.filter((c) => c.line === leftLineNum && c.path === path && c.side === "LEFT")
+                : []
+              return html`
+                <${LineRow}
+                  key=${"l" + i}
+                  line=${pair.left}
+                  viewMode="side-by-side"
+                  side="left"
+                  path=${path}
+                />
+                ${leftComments.length > 0 && html`
+                  <${CommentThread}
+                    comments=${leftComments}
+                    path=${path}
+                    line=${leftLineNum}
+                    onReply=${onReply}
+                    onResolve=${onResolve}
+                  />
+                `}
+              `
+            })}
           </div>
         </div>
         <!-- Right panel (new) -->

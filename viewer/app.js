@@ -49,7 +49,7 @@ function App() {
   // Expand a file (for scrollToLine)
   const expandFile = useCallback((path) => {
     setExpandedFiles((prev) => {
-      if (prev[path] === false) {
+      if (!prev[path]) {
         return { ...prev, [path]: true }
       }
       return prev
@@ -60,7 +60,7 @@ function App() {
   const handleToggle = useCallback((path) => {
     setExpandedFiles((prev) => ({
       ...prev,
-      [path]: prev[path] === false ? true : false,
+      [path]: !prev[path],
     }))
   }, [])
 
