@@ -102,10 +102,9 @@ function highlightHunk(hunkEl) {
       codeEls.forEach((el) => {
         if (!el.dataset.highlighted) {
           el.dataset.highlighted = "true"
-          const text = el.textContent || ""
           try {
-            const html = Prism.highlight(text, Prism.languages[lang] || Prism.languages.plain, lang)
-            el.innerHTML = html
+            el.className = `language-${lang}`
+            Prism.highlightElement(el)
           } catch {
             // Silently fail
           }

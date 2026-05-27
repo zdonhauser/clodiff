@@ -110,10 +110,12 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
                 }
                 const raw = readFileSync(sessionPath, "utf-8")
                 const session = JSON.parse(raw) as SessionFile
-                // Update the most recent review's event or create a new one
-                if (session.reviews && session.reviews.length > 0) {
-                  session.reviews[session.reviews.length - 1].event = body.event as "COMMENT" | "APPROVE" | "REQUEST_CHANGES"
+                // Reject if there are no reviews to update
+                if (!session.reviews || session.reviews.length === 0) {
+                  return new Response("No reviews in session", { status: 400 })
                 }
+                // Update the most recent review's event
+                session.reviews[session.reviews.length - 1].event = body.event as "COMMENT" | "APPROVE" | "REQUEST_CHANGES"
                 session.updated_at = new Date().toISOString()
                 writeFileSync(sessionPath, JSON.stringify(session, null, 2))
                 return new Response("OK", { status: 200 })
