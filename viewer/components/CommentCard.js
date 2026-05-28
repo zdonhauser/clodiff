@@ -92,13 +92,18 @@ function SourceLabel({ source }) {
  * CommentCard — individual comment card.
  *
  * Props:
- *   comment  — ReviewComment
- *   onReply   — (commentId) => void
- *   onResolve — (commentId) => void
- *   onAction  — (commentId, action: "fix" | "reject") => void
+ *   comment     — ReviewComment
+ *   onReply     — (commentId) => void
+ *   onResolve   — (commentId) => void
+ *   onAction    — (commentId, action: "fix" | "reject") => void
+ *   getNavInfo  — (commentId) => { index, total, prevId, nextId, severity } | null
+ *   onNavigate  — (commentId) => void
  */
-export function CommentCard({ comment, onReply, onResolve, onAction }) {
+export function CommentCard({ comment, onReply, onResolve, onAction, getNavInfo, onNavigate }) {
   const [showReply, setShowReply] = useState(false)
+
+  const navInfo = !comment.resolved ? getNavInfo?.(comment.id) : null
+  const navColor = navInfo ? (SEVERITY_COLORS[navInfo.severity] || "var(--color-fg-muted)") : null
 
   const handleResolve = async () => {
     onResolve?.(comment.id)
@@ -268,6 +273,57 @@ export function CommentCard({ comment, onReply, onResolve, onAction }) {
               cursor: "pointer",
             }}
           >Resolve</button>
+
+          <!-- Severity-ordered prev/next navigation -->
+          ${navInfo && html`
+            <div style=${{ display: "flex", alignItems: "center", gap: "2px", marginLeft: "2px" }}>
+              <button
+                onClick=${() => navInfo.prevId && onNavigate?.(navInfo.prevId)}
+                disabled=${!navInfo.prevId}
+                title="Previous comment"
+                style=${{
+                  padding: "2px 6px",
+                  background: "transparent",
+                  border: "1px solid var(--color-border-default)",
+                  borderRadius: "var(--radius-sm)",
+                  color: navInfo.prevId ? "var(--color-fg-default)" : "var(--color-fg-subtle)",
+                  fontSize: "11px",
+                  cursor: navInfo.prevId ? "pointer" : "default",
+                  lineHeight: 1,
+                }}
+              >↑</button>
+              <span style=${{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+                padding: "2px 6px",
+                border: "1px solid var(--color-border-muted)",
+                borderRadius: "var(--radius-sm)",
+                fontSize: "11px",
+                color: "var(--color-fg-muted)",
+                userSelect: "none",
+              }}>
+                <span style=${{ width: "6px", height: "6px", borderRadius: "50%", background: navColor, flexShrink: 0 }} />
+                ${navInfo.index + 1}/${navInfo.total}
+              </span>
+              <button
+                onClick=${() => navInfo.nextId && onNavigate?.(navInfo.nextId)}
+                disabled=${!navInfo.nextId}
+                title="Next comment"
+                style=${{
+                  padding: "2px 6px",
+                  background: "transparent",
+                  border: "1px solid var(--color-border-default)",
+                  borderRadius: "var(--radius-sm)",
+                  color: navInfo.nextId ? "var(--color-fg-default)" : "var(--color-fg-subtle)",
+                  fontSize: "11px",
+                  cursor: navInfo.nextId ? "pointer" : "default",
+                  lineHeight: 1,
+                }}
+              >↓</button>
+            </div>
+          `}
+
           ${comment.source === "claude-code" && html`
             <button
               onClick=${() => onAction?.(comment.id, "fix")}
