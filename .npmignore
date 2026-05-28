@@ -1,0 +1,8 @@
+src/__tests__/
+e2e/
+docs/
+.github/
+playwright.config.ts
+tsconfig.json
+bun.lockb
+*.tgz
