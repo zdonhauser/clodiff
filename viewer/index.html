@@ -138,10 +138,16 @@
 
     /* ── Mobile tweaks ────────────────────────────────────────────── */
     @media (max-width: 768px) {
-      /* Code area scrolls horizontally without taking the whole page */
+      /* Code lines wrap instead of scrolling horizontally */
+      .diff-line-content {
+        white-space: pre-wrap !important;
+        word-break: break-all;
+        overflow-wrap: anywhere;
+      }
+
+      /* Code area no longer needs horizontal scroll */
       [data-hunk] {
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
+        overflow-x: visible;
       }
 
       /* Comment threads: tighter left indent so card fills the screen */
