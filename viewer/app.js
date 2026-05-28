@@ -1,5 +1,5 @@
 import { h, render } from "https://esm.sh/preact"
-import { useState, useEffect, useCallback, useRef } from "https://esm.sh/preact/hooks"
+import { useState, useEffect, useCallback, useRef, useMemo } from "https://esm.sh/preact/hooks"
 import { html } from "https://esm.sh/htm/preact"
 
 import { createWebSocket } from "./utils/websocket.js"
@@ -9,6 +9,9 @@ import { Header } from "./components/Header.js"
 import { FileList } from "./components/FileList.js"
 import { FileSidebar } from "./components/FileSidebar.js"
 import { FileViewer } from "./components/FileViewer.js"
+import { CommentNavigator } from "./components/CommentNavigator.js"
+
+const SEVERITY_ORDER = { error: 0, warning: 1, suggestion: 2, note: 3 }
 
 // ── Storage helpers ────────────────────────────────────────────────────────
 
@@ -59,6 +62,7 @@ function App() {
   })
   const [openFile, setOpenFile] = useState(null) // { path, isDiff } for non-diff file panel
   const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" ? window.innerWidth < 768 : false)
+  const [navIdx, setNavIdx] = useState(-1)
 
   // Map from file path → DOM element (for scrollToLine)
   const fileRefs = useRef({})
@@ -81,6 +85,47 @@ function App() {
       return prev
     })
   }, [])
+
+  // Severity-sorted unresolved comments for navigation
+  const sortedUnresolved = useMemo(() => {
+    return comments
+      .filter((c) => !c.resolved)
+      .sort((a, b) => {
+        const sa = SEVERITY_ORDER[a.severity] ?? 4
+        const sb = SEVERITY_ORDER[b.severity] ?? 4
+        if (sa !== sb) return sa - sb
+        const fa = diff.findIndex((f) => f.path === a.path)
+        const fb = diff.findIndex((f) => f.path === b.path)
+        if (fa !== fb) return fa - fb
+        return (a.line ?? 0) - (b.line ?? 0)
+      })
+  }, [comments, diff])
+
+  const getNavInfo = useCallback((commentId) => {
+    const idx = sortedUnresolved.findIndex((c) => c.id === commentId)
+    if (idx === -1) return null
+    return {
+      index: idx,
+      total: sortedUnresolved.length,
+      prevId: idx > 0 ? sortedUnresolved[idx - 1].id : null,
+      nextId: idx < sortedUnresolved.length - 1 ? sortedUnresolved[idx + 1].id : null,
+      severity: sortedUnresolved[idx].severity,
+    }
+  }, [sortedUnresolved])
+
+  const handleNavigate = useCallback((commentId) => {
+    const comment = comments.find((c) => c.id === commentId)
+    if (!comment) return
+    const idx = sortedUnresolved.findIndex((c) => c.id === commentId)
+    if (idx !== -1) setNavIdx(idx)
+    expandFile(comment.path)
+    setTimeout(() => {
+      scrollToLine(comment.path, comment.line, {
+        expandFile,
+        getFileRef: (p) => fileRefs.current[p],
+      })
+    }, 50)
+  }, [comments, sortedUnresolved, expandFile])
 
   // Toggle expand/collapse for a file
   const handleToggle = useCallback((path) => {
@@ -297,24 +342,12 @@ function App() {
 
     setComments((prev) => prev.map((c) => c.id === commentId ? { ...c, resolved: true } : c))
 
-    // Find next unresolved comment in file/line order and scroll to it
-    const sorted = [...comments].sort((a, b) => {
-      const aFile = diff.findIndex((f) => f.path === a.path)
-      const bFile = diff.findIndex((f) => f.path === b.path)
-      if (aFile !== bFile) return aFile - bFile
-      return a.line - b.line
-    })
-    const idx = sorted.findIndex((c) => c.id === commentId)
-    if (idx === -1) return
-    const next = sorted.slice(idx + 1).find((c) => !c.resolved && c.id !== commentId)
-    if (next) {
-      fetch("/_ws_broadcast", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "scroll_to", path: next.path, line: next.line }),
-      }).catch(() => {})
+    // Navigate to next in severity order
+    const idx = sortedUnresolved.findIndex((c) => c.id === commentId)
+    if (idx !== -1 && idx < sortedUnresolved.length - 1) {
+      handleNavigate(sortedUnresolved[idx + 1].id)
     }
-  }, [comments, diff])
+  }, [sortedUnresolved, handleNavigate])
 
   // Reply callback (no-op here; ReplyInput handles the POST)
   const handleReply = useCallback((commentId) => {
@@ -373,10 +406,17 @@ function App() {
                 onResolve=${handleResolve}
                 onAction=${handleAction}
                 onFileRef=${handleFileRef}
+                getNavInfo=${getNavInfo}
+                onNavigate=${handleNavigate}
               />`
           }
         </main>
       </div>
+      <${CommentNavigator}
+        sortedUnresolved=${sortedUnresolved}
+        navIdx=${navIdx}
+        onNavigate=${handleNavigate}
+      />
     </div>
   `
 }

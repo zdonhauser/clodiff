@@ -13,7 +13,7 @@ import { CommentCard } from "./CommentCard.js"
  *   onResolve — (commentId) => void
  *   onAction  — (commentId, action) => void
  */
-export function CommentThread({ comments, path, line, onReply, onResolve, onAction }) {
+export function CommentThread({ comments, path, line, onReply, onResolve, onAction, getNavInfo, onNavigate }) {
   if (!comments || comments.length === 0) return null
 
   const resolved = comments.filter((c) => c.resolved)
@@ -39,6 +39,8 @@ export function CommentThread({ comments, path, line, onReply, onResolve, onActi
               onReply=${onReply}
               onResolve=${onResolve}
               onAction=${onAction}
+              getNavInfo=${getNavInfo}
+              onNavigate=${onNavigate}
             />
           `)}
         </div>

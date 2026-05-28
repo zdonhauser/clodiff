@@ -45,6 +45,8 @@ export function FileList({
   onResolve,
   onFileRef,
   onAction,
+  getNavInfo,
+  onNavigate,
 }) {
   const containerRef = useRef(null)
   const [stickyFile, setStickyFile] = useState(null)
@@ -180,6 +182,8 @@ export function FileList({
               onResolve=${onResolve}
               onRef=${handleRef}
               onAction=${onAction}
+              getNavInfo=${getNavInfo}
+              onNavigate=${onNavigate}
             />
           `
         })}
