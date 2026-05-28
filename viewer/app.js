@@ -305,7 +305,8 @@ function App() {
       return a.line - b.line
     })
     const idx = sorted.findIndex((c) => c.id === commentId)
-    const next = sorted.slice(idx + 1).find((c) => !c.resolved)
+    if (idx === -1) return
+    const next = sorted.slice(idx + 1).find((c) => !c.resolved && c.id !== commentId)
     if (next) {
       fetch("/_ws_broadcast", {
         method: "POST",
