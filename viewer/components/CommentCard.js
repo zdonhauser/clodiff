@@ -93,8 +93,9 @@ function SourceLabel({ source }) {
  *
  * Props:
  *   comment  — ReviewComment
- *   onReply  — (commentId) => void
+ *   onReply   — (commentId) => void
  *   onResolve — (commentId) => void
+ *   onAction  — (commentId, action: "fix" | "reject") => void
  */
 export function CommentCard({ comment, onReply, onResolve, onAction }) {
   const [showReply, setShowReply] = useState(false)
