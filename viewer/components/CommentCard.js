@@ -96,7 +96,7 @@ function SourceLabel({ source }) {
  *   onReply  — (commentId) => void
  *   onResolve — (commentId) => void
  */
-export function CommentCard({ comment, onReply, onResolve }) {
+export function CommentCard({ comment, onReply, onResolve, onAction }) {
   const [showReply, setShowReply] = useState(false)
 
   const handleResolve = async () => {
@@ -267,6 +267,33 @@ export function CommentCard({ comment, onReply, onResolve }) {
               cursor: "pointer",
             }}
           >Resolve</button>
+          ${comment.source === "claude-code" && html`
+            <button
+              onClick=${() => onAction?.(comment.id, "fix")}
+              style=${{
+                padding: "3px 10px",
+                background: "var(--color-accent-emphasis)",
+                border: "1px solid transparent",
+                borderRadius: "var(--radius-sm)",
+                color: "#ffffff",
+                fontSize: "12px",
+                cursor: "pointer",
+                fontWeight: "500",
+              }}
+            >Fix It</button>
+            <button
+              onClick=${() => onAction?.(comment.id, "reject")}
+              style=${{
+                padding: "3px 10px",
+                background: "transparent",
+                border: "1px solid var(--color-border-default)",
+                borderRadius: "var(--radius-sm)",
+                color: "var(--color-fg-muted)",
+                fontSize: "12px",
+                cursor: "pointer",
+              }}
+            >Reject</button>
+          `}
         </div>
       `}
     </div>
