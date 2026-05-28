@@ -270,13 +270,50 @@ function App() {
 
   // Resolve a comment (optimistic UI update + POST)
   const handleResolve = useCallback(async (commentId) => {
-    // Optimistic update
     setComments((prev) =>
       prev.map((c) => (c.id === commentId ? { ...c, resolved: true } : c))
     )
-    // No server endpoint for resolve yet — optimistic only
-    // Future: POST /resolve { comment_id: commentId }
+    fetch("/resolve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ comment_id: commentId }),
+    }).catch(() => {})
   }, [])
+
+  const handleAction = useCallback(async (commentId, action) => {
+    const replyRes = await fetch("/reply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ comment_id: commentId, body: action === "fix" ? "Fix It" : "Rejected" }),
+    })
+    if (!replyRes.ok) return
+
+    const resolveRes = await fetch("/resolve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ comment_id: commentId }),
+    })
+    if (!resolveRes.ok) return
+
+    setComments((prev) => prev.map((c) => c.id === commentId ? { ...c, resolved: true } : c))
+
+    // Find next unresolved comment in file/line order and scroll to it
+    const sorted = [...comments].sort((a, b) => {
+      const aFile = diff.findIndex((f) => f.path === a.path)
+      const bFile = diff.findIndex((f) => f.path === b.path)
+      if (aFile !== bFile) return aFile - bFile
+      return a.line - b.line
+    })
+    const idx = sorted.findIndex((c) => c.id === commentId)
+    const next = sorted.slice(idx + 1).find((c) => !c.resolved)
+    if (next) {
+      fetch("/_ws_broadcast", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "scroll_to", path: next.path, line: next.line }),
+      }).catch(() => {})
+    }
+  }, [comments, diff])
 
   // Reply callback (no-op here; ReplyInput handles the POST)
   const handleReply = useCallback((commentId) => {
@@ -330,6 +367,7 @@ function App() {
                 viewMode=${viewMode}
                 onReply=${handleReply}
                 onResolve=${handleResolve}
+                onAction=${handleAction}
                 onFileRef=${handleFileRef}
               />`
           }
