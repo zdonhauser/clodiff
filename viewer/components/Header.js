@@ -12,7 +12,7 @@ import { RefPicker } from "./RefPicker.js"
  *   viewMode   — "unified" | "side-by-side"
  *   onViewMode — (mode) => void
  */
-export function Header({ session, fileCount, wsStatus, viewMode, onViewMode, sidebarOpen, onToggleSidebar }) {
+export function Header({ session, fileCount, wsStatus, viewMode, onViewMode, sidebarOpen, onToggleSidebar, isMobile }) {
   const [rediffStatus, setRediffStatus] = useState(null)
   const [fromRef, setFromRef] = useState(null)
   const [toRef, setToRef] = useState(null)
@@ -218,8 +218,8 @@ export function Header({ session, fileCount, wsStatus, viewMode, onViewMode, sid
             `}
           </span>
 
-          <!-- File count -->
-          ${fileCount > 0 && html`
+          <!-- File count — hidden on very small screens -->
+          ${fileCount > 0 && !isMobile && html`
             <span style=${{
               color: "var(--color-fg-muted)",
               fontSize: "12px",
@@ -238,38 +238,40 @@ export function Header({ session, fileCount, wsStatus, viewMode, onViewMode, sid
         display: "flex",
         alignItems: "center",
         gap: "8px",
-        padding: "6px 16px 8px",
+        padding: isMobile ? "6px 10px 8px" : "6px 16px 8px",
         borderTop: "1px solid var(--color-border-muted)",
         overflowX: "auto",
         WebkitOverflowScrolling: "touch",
         flexShrink: 0,
       }}>
-        <!-- View mode toggle -->
-        <div style=${{
-          display: "flex",
-          border: "1px solid var(--color-border-default)",
-          borderRadius: "var(--radius-sm)",
-          overflow: "hidden",
-          flexShrink: 0,
-        }}>
-          ${["unified", "side-by-side"].map((mode) => html`
-            <button
-              key=${mode}
-              onClick=${() => onViewMode?.(mode)}
-              style=${{
-                ...btnBase,
-                border: "none",
-                borderRadius: 0,
-                background: viewMode === mode ? "var(--color-accent-emphasis)" : "var(--color-bg)",
-                color: viewMode === mode ? "#ffffff" : "var(--color-fg-default)",
-                borderRight: mode === "unified" ? "1px solid var(--color-border-default)" : "none",
-                fontWeight: viewMode === mode ? "600" : "400",
-                fontSize: "12px",
-                whiteSpace: "nowrap",
-              }}
-            >${mode === "unified" ? "Unified" : "Side by side"}</button>
-          `)}
-        </div>
+        <!-- View mode toggle — hidden on mobile (unified is forced) -->
+        ${!isMobile && html`
+          <div style=${{
+            display: "flex",
+            border: "1px solid var(--color-border-default)",
+            borderRadius: "var(--radius-sm)",
+            overflow: "hidden",
+            flexShrink: 0,
+          }}>
+            ${["unified", "side-by-side"].map((mode) => html`
+              <button
+                key=${mode}
+                onClick=${() => onViewMode?.(mode)}
+                style=${{
+                  ...btnBase,
+                  border: "none",
+                  borderRadius: 0,
+                  background: viewMode === mode ? "var(--color-accent-emphasis)" : "var(--color-bg)",
+                  color: viewMode === mode ? "#ffffff" : "var(--color-fg-default)",
+                  borderRight: mode === "unified" ? "1px solid var(--color-border-default)" : "none",
+                  fontWeight: viewMode === mode ? "600" : "400",
+                  fontSize: "12px",
+                  whiteSpace: "nowrap",
+                }}
+              >${mode === "unified" ? "Unified" : "Side by side"}</button>
+            `)}
+          </div>
+        `}
 
         <div style=${{ flex: 1 }} />
 
@@ -287,19 +289,21 @@ export function Header({ session, fileCount, wsStatus, viewMode, onViewMode, sid
           ${reviewStatus === "approving" ? "Approving…" : reviewStatus === "approved" ? "✓ Approved" : "Approve"}
         </button>
 
-        <!-- Request Changes -->
-        <button
-          onClick=${() => handleReviewEvent("REQUEST_CHANGES")}
-          disabled=${reviewStatus === "requesting"}
-          style=${{
-            ...btnBase,
-            background: reviewStatus === "changes_requested" ? "var(--color-danger-fg)" : "var(--color-bg)",
-            color: reviewStatus === "changes_requested" ? "#ffffff" : "var(--color-danger-fg)",
-            borderColor: reviewStatus === "changes_requested" ? "var(--color-danger-fg)" : "var(--color-border-default)",
-          }}
-        >
-          ${reviewStatus === "requesting" ? "Requesting…" : reviewStatus === "changes_requested" ? "✓ Changes Requested" : "Request Changes"}
-        </button>
+        <!-- Request Changes — hidden on mobile to save space -->
+        ${!isMobile && html`
+          <button
+            onClick=${() => handleReviewEvent("REQUEST_CHANGES")}
+            disabled=${reviewStatus === "requesting"}
+            style=${{
+              ...btnBase,
+              background: reviewStatus === "changes_requested" ? "var(--color-danger-fg)" : "var(--color-bg)",
+              color: reviewStatus === "changes_requested" ? "#ffffff" : "var(--color-danger-fg)",
+              borderColor: reviewStatus === "changes_requested" ? "var(--color-danger-fg)" : "var(--color-border-default)",
+            }}
+          >
+            ${reviewStatus === "requesting" ? "Requesting…" : reviewStatus === "changes_requested" ? "✓ Changes Requested" : "Request Changes"}
+          </button>
+        `}
 
         <!-- Push to GitHub -->
         <button
@@ -312,7 +316,7 @@ export function Header({ session, fileCount, wsStatus, viewMode, onViewMode, sid
             border: "none",
           }}
         >
-          ${pushStatus === "pushing" ? "Pushing…" : pushStatus === "done" ? "✓ Pushed" : pushStatus === "error" ? "Push Failed" : "Push to GitHub"}
+          ${pushStatus === "pushing" ? "Pushing…" : pushStatus === "done" ? "✓ Pushed" : pushStatus === "error" ? "Failed" : isMobile ? "Push" : "Push to GitHub"}
         </button>
       </div>
     </header>

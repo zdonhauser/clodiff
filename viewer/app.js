@@ -322,6 +322,8 @@ function App() {
   }, [])
 
   const fileCount = diff.length
+  // On mobile always use unified — side-by-side is unusable on narrow screens
+  const effectiveViewMode = isMobile ? "unified" : viewMode
 
   return html`
     <div style=${{ height: "100%", background: "var(--color-bg)", display: "flex", flexDirection: "column" }}>
@@ -329,10 +331,11 @@ function App() {
         session=${session}
         fileCount=${fileCount}
         wsStatus=${wsStatus}
-        viewMode=${viewMode}
+        viewMode=${effectiveViewMode}
         onViewMode=${handleViewMode}
         sidebarOpen=${sidebarOpen}
         onToggleSidebar=${handleToggleSidebar}
+        isMobile=${isMobile}
       />
       <div style=${{ display: "flex", flex: 1, overflow: "hidden", position: "relative" }}>
         ${sidebarOpen && isMobile && html`
@@ -365,7 +368,7 @@ function App() {
                 comments=${comments}
                 expandedFiles=${expandedFiles}
                 onToggle=${handleToggle}
-                viewMode=${viewMode}
+                viewMode=${effectiveViewMode}
                 onReply=${handleReply}
                 onResolve=${handleResolve}
                 onAction=${handleAction}

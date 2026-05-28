@@ -22,11 +22,13 @@ export function CommentThread({ comments, path, line, onReply, onResolve, onActi
   const [showResolved, setShowResolved] = useState(false)
 
   return html`
-    <div style=${{
-      padding: "8px 16px 8px 60px",
-      background: "var(--color-canvas-subtle)",
-      borderBottom: "1px solid var(--color-border-default)",
-    }}>
+    <div
+      class="comment-thread"
+      style=${{
+        padding: "8px 16px 8px 60px",
+        background: "var(--color-canvas-subtle)",
+        borderBottom: "1px solid var(--color-border-default)",
+      }}>
       <!-- Active (unresolved) comments -->
       ${unresolved.length > 0 && html`
         <div style=${{ display: "flex", flexDirection: "column", gap: "8px" }}>
