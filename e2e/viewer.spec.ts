@@ -1,4 +1,5 @@
 import { test, expect } from "./fixtures/server.js"
+import { readFileSync, writeFileSync } from "fs"
 
 test("/tree returns array of tracked files", async ({ server }) => {
   const res = await fetch(`http://localhost:${server.port}/tree`)
@@ -56,4 +57,42 @@ test("GET / serves the viewer HTML", async ({ server }) => {
   expect(res.status).toBe(200)
   const html = await res.text()
   expect(html).toContain("<!DOCTYPE html")
+})
+
+test("POST /resolve marks a comment resolved in session.json", async ({ server }) => {
+  const session = JSON.parse(readFileSync(server.sessionPath, "utf-8"))
+  const commentId = "resolve-test-" + Date.now()
+  session.reviews[session.reviews.length - 1].comments.push({
+    id: commentId,
+    created_at: new Date().toISOString(),
+    source: "claude-code",
+    body: "test",
+    path: "app.ts",
+    commit_id: session.head_commit,
+    line: 1,
+    side: "RIGHT",
+  })
+  writeFileSync(server.sessionPath, JSON.stringify(session, null, 2))
+
+  const res = await fetch(`http://localhost:${server.port}/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ comment_id: commentId }),
+  })
+  expect(res.status).toBe(200)
+
+  const updated = JSON.parse(readFileSync(server.sessionPath, "utf-8"))
+  const found = updated.reviews
+    .flatMap((r: { comments: Array<{ id: string; resolved?: boolean }> }) => r.comments)
+    .find((c: { id: string }) => c.id === commentId)
+  expect(found?.resolved).toBe(true)
+})
+
+test("POST /resolve returns 404 for unknown comment id", async ({ server }) => {
+  const res = await fetch(`http://localhost:${server.port}/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ comment_id: "does-not-exist" }),
+  })
+  expect(res.status).toBe(404)
 })
