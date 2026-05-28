@@ -10,12 +10,13 @@ A local code viewer for Claude. Run it in any repo and Claude can navigate it, h
 
 ## Installation
 
+Requires [Bun](https://bun.sh). Run without installing:
+
 ```bash
-bunx clodiff      # no install needed
-npx clodiff
+bunx clodiff
 ```
 
-Or globally:
+Or install globally:
 
 ```bash
 bun add -g clodiff

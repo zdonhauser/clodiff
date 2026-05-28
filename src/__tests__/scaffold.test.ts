@@ -11,9 +11,6 @@ describe("scaffold", () => {
     "src/github.ts",
     "viewer/index.html",
     "viewer/app.js",
-    "hooks/inject-replies.js",
-    "hooks/load-session.js",
-    "CLAUDE.md",
     "package.json",
     "tsconfig.json",
   ]
