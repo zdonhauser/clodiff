@@ -144,3 +144,131 @@ test("submitting a reply writes to replies.json", async ({ page, server }) => {
   expect(ourReply).toBeDefined()
   expect(ourReply.body).toBe("great point, will fix")
 })
+
+test("Fix It button posts 'Fix It' reply and resolves the comment", async ({ page, server }) => {
+  await page.goto(server.baseURL)
+  await page.waitForSelector("[data-file-path]", { timeout: 15000 })
+
+  const session = JSON.parse(readFileSync(server.sessionPath, "utf-8"))
+  const review = session.reviews[session.reviews.length - 1]
+  const commentId = "fix-it-test-" + Date.now()
+  review.comments.push({
+    id: commentId,
+    created_at: new Date().toISOString(),
+    source: "claude-code",
+    body: "this code needs fixing",
+    path: "app.ts",
+    commit_id: session.head_commit,
+    line: 2,
+    side: "RIGHT",
+    line_content: "export function farewell",
+    severity: "error",
+  })
+  writeFileSync(server.sessionPath, JSON.stringify(session, null, 2))
+
+  await page.evaluate(async (port) => {
+    await fetch(`http://localhost:${port}/_ws_broadcast`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "session_update" }),
+    })
+  }, server.port)
+
+  await expect(page.getByText("this code needs fixing")).toBeVisible({ timeout: 8000 })
+  await expect(page.getByRole("button", { name: "Fix It" })).toBeVisible()
+
+  await page.getByRole("button", { name: "Fix It" }).click()
+
+  // Button disappears once comment is resolved
+  await expect(page.getByRole("button", { name: "Fix It" })).not.toBeVisible({ timeout: 5000 })
+
+  await page.waitForTimeout(500)
+  const replies = JSON.parse(readFileSync(server.repliesPath, "utf-8"))
+  const reply = replies.find((r: { comment_id: string }) => r.comment_id === commentId)
+  expect(reply?.body).toBe("Fix It")
+
+  const updated = JSON.parse(readFileSync(server.sessionPath, "utf-8"))
+  const comment = updated.reviews
+    .flatMap((r: { comments: Array<{ id: string; resolved?: boolean }> }) => r.comments)
+    .find((c: { id: string }) => c.id === commentId)
+  expect(comment?.resolved).toBe(true)
+})
+
+test("Reject button posts 'Rejected' reply and resolves the comment", async ({ page, server }) => {
+  await page.goto(server.baseURL)
+  await page.waitForSelector("[data-file-path]", { timeout: 15000 })
+
+  const session = JSON.parse(readFileSync(server.sessionPath, "utf-8"))
+  const review = session.reviews[session.reviews.length - 1]
+  const commentId = "reject-test-" + Date.now()
+  review.comments.push({
+    id: commentId,
+    created_at: new Date().toISOString(),
+    source: "claude-code",
+    body: "this suggestion should be rejected",
+    path: "app.ts",
+    commit_id: session.head_commit,
+    line: 2,
+    side: "RIGHT",
+    line_content: "export function farewell",
+    severity: "suggestion",
+  })
+  writeFileSync(server.sessionPath, JSON.stringify(session, null, 2))
+
+  await page.evaluate(async (port) => {
+    await fetch(`http://localhost:${port}/_ws_broadcast`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "session_update" }),
+    })
+  }, server.port)
+
+  await expect(page.getByText("this suggestion should be rejected")).toBeVisible({ timeout: 8000 })
+  await expect(page.getByRole("button", { name: "Reject" })).toBeVisible()
+
+  await page.getByRole("button", { name: "Reject" }).click()
+
+  await expect(page.getByRole("button", { name: "Reject" })).not.toBeVisible({ timeout: 5000 })
+
+  await page.waitForTimeout(500)
+  const replies = JSON.parse(readFileSync(server.repliesPath, "utf-8"))
+  const reply = replies.find((r: { comment_id: string }) => r.comment_id === commentId)
+  expect(reply?.body).toBe("Rejected")
+
+  const updated = JSON.parse(readFileSync(server.sessionPath, "utf-8"))
+  const comment = updated.reviews
+    .flatMap((r: { comments: Array<{ id: string; resolved?: boolean }> }) => r.comments)
+    .find((c: { id: string }) => c.id === commentId)
+  expect(comment?.resolved).toBe(true)
+})
+
+test("Fix It and Reject buttons do not appear on user-authored comments", async ({ page, server }) => {
+  await page.goto(server.baseURL)
+  await page.waitForSelector("[data-file-path]", { timeout: 15000 })
+
+  const session = JSON.parse(readFileSync(server.sessionPath, "utf-8"))
+  const review = session.reviews[session.reviews.length - 1]
+  review.comments.push({
+    id: "user-comment-no-actions",
+    created_at: new Date().toISOString(),
+    source: "user",
+    body: "user authored note",
+    path: "app.ts",
+    commit_id: session.head_commit,
+    line: 2,
+    side: "RIGHT",
+  })
+  writeFileSync(server.sessionPath, JSON.stringify(session, null, 2))
+
+  await page.evaluate(async (port) => {
+    await fetch(`http://localhost:${port}/_ws_broadcast`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "session_update" }),
+    })
+  }, server.port)
+
+  await expect(page.getByText("user authored note")).toBeVisible({ timeout: 8000 })
+  await expect(page.getByRole("button", { name: "Fix It" })).not.toBeVisible()
+  await expect(page.getByRole("button", { name: "Reject" })).not.toBeVisible()
+})
