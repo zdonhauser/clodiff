@@ -126,6 +126,36 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
             }).catch(() => new Response("Invalid JSON", { status: 400 }))
           }
 
+          // POST /resolve — mark a comment as resolved in session.json
+          if (url.pathname === "/resolve" && req.method === "POST") {
+            return req.json().then((body: { comment_id: string }) => {
+              try {
+                const sessionPath = join(repoDir, ".review", "session.json")
+                if (!existsSync(sessionPath)) return new Response("Not Found", { status: 404 })
+                const raw = readFileSync(sessionPath, "utf-8")
+                const session = JSON.parse(raw) as SessionFile
+                let found = false
+                for (const review of session.reviews || []) {
+                  for (const comment of review.comments || []) {
+                    if (comment.id === body.comment_id) {
+                      comment.resolved = true
+                      found = true
+                    }
+                  }
+                }
+                if (!found) return new Response("Comment not found", { status: 404 })
+                session.updated_at = new Date().toISOString()
+                writeFileSync(sessionPath, JSON.stringify(session, null, 2))
+                for (const client of wsClients) {
+                  client.send(JSON.stringify({ type: "session_update" }))
+                }
+                return new Response("OK", { status: 200 })
+              } catch {
+                return new Response("Internal Server Error", { status: 500 })
+              }
+            }).catch(() => new Response("Invalid JSON", { status: 400 }))
+          }
+
           // POST /review/event — set the event (APPROVE / REQUEST_CHANGES / COMMENT) on the current review
           if (url.pathname === "/review/event" && req.method === "POST") {
             return req.json().then((body: { event: string }) => {
