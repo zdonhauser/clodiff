@@ -1,7 +1,7 @@
 import { html } from "https://esm.sh/htm/preact"
 
 /**
- * LineRow — renders a single diff line.
+ * LineRow — renders a single diff line using flexbox.
  *
  * Props:
  *   line     — { type: "added"|"removed"|"context", content, oldLineNumber, newLineNumber }
@@ -31,7 +31,6 @@ export function LineRow({ line, viewMode, side, path, onClick }) {
 
   const prefix = type === "added" ? "+" : type === "removed" ? "-" : " "
 
-  // The effective line number for anchoring (side determines which number to use in side-by-side)
   const anchorLine =
     viewMode === "side-by-side"
       ? side === "left"
@@ -40,7 +39,8 @@ export function LineRow({ line, viewMode, side, path, onClick }) {
       : newLineNumber ?? oldLineNumber
 
   const lineStyle = {
-    display: "table-row",
+    display: "flex",
+    alignItems: "center",
     background: bgColor,
     fontFamily: "var(--font-mono)",
     fontSize: "var(--font-code-size)",
@@ -48,28 +48,28 @@ export function LineRow({ line, viewMode, side, path, onClick }) {
   }
 
   const gutterStyle = {
-    display: "table-cell",
     width: "4px",
     minWidth: "4px",
+    alignSelf: "stretch",
     background: gutterColor,
+    flexShrink: 0,
     padding: "0",
   }
 
   const lineNumStyle = {
-    display: "table-cell",
     padding: "0 8px",
     textAlign: "right",
     color: "var(--color-fg-subtle)",
     userSelect: "none",
     width: "50px",
     minWidth: "50px",
+    flexShrink: 0,
     whiteSpace: "nowrap",
     cursor: onClick ? "pointer" : "default",
     fontSize: "var(--font-code-size)",
   }
 
   const prefixStyle = {
-    display: "table-cell",
     padding: "0 4px",
     color:
       type === "added"
@@ -80,16 +80,17 @@ export function LineRow({ line, viewMode, side, path, onClick }) {
     userSelect: "none",
     width: "16px",
     minWidth: "16px",
+    flexShrink: 0,
     textAlign: "center",
     fontSize: "var(--font-code-size)",
   }
 
   const contentStyle = {
-    display: "table-cell",
     padding: "0 16px 0 4px",
     whiteSpace: "pre",
     tabSize: 4,
-    width: "100%",
+    flex: 1,
+    minWidth: 0,
     fontSize: "var(--font-code-size)",
   }
 
@@ -103,10 +104,7 @@ export function LineRow({ line, viewMode, side, path, onClick }) {
 
   if (viewMode === "unified") {
     return html`
-      <div
-        style=${lineStyle}
-        ...${dataAttrs}
-      >
+      <div style=${lineStyle} ...${dataAttrs}>
         <div style=${gutterStyle} />
         <div
           style=${lineNumStyle}
@@ -124,16 +122,15 @@ export function LineRow({ line, viewMode, side, path, onClick }) {
     `
   }
 
-  // Side-by-side: render either left or right cell depending on side
+  // Side-by-side
   if (side === "left") {
     const show = type === "removed" || type === "context"
     if (!show) {
-      // Empty placeholder row
       return html`
         <div style=${{ ...lineStyle, background: "var(--color-canvas-subtle)" }} ...${dataAttrs}>
           <div style=${gutterStyle} />
           <div style=${{ ...lineNumStyle, color: "transparent" }}> </div>
-          <div style=${prefixStyle}> </div>
+          <div style=${{ ...prefixStyle, color: "transparent" }}> </div>
           <div style=${{ ...contentStyle, color: "transparent" }}> </div>
         </div>
       `
@@ -158,7 +155,7 @@ export function LineRow({ line, viewMode, side, path, onClick }) {
       <div style=${{ ...lineStyle, background: "var(--color-canvas-subtle)" }} ...${dataAttrs}>
         <div style=${gutterStyle} />
         <div style=${{ ...lineNumStyle, color: "transparent" }}> </div>
-        <div style=${prefixStyle}> </div>
+        <div style=${{ ...prefixStyle, color: "transparent" }}> </div>
         <div style=${{ ...contentStyle, color: "transparent" }}> </div>
       </div>
     `

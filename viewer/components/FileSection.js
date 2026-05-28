@@ -185,7 +185,7 @@ export function FileSection({ file, comments = [], expanded, onToggle, viewMode,
 
       <!-- Hunks (when expanded) -->
       ${expanded && file.hunks.length > 0 && html`
-        <div style=${{ overflow: "auto" }}>
+        <div style=${{ overflow: "auto", WebkitOverflowScrolling: "touch" }}>
           ${file.hunks.map((hunk, i) => html`
             <${DiffHunk}
               key=${i}
