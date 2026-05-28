@@ -12,8 +12,9 @@ import { CommentThread } from "./CommentThread.js"
  *   path      — file path
  *   onReply   — (commentId) => void
  *   onResolve — (commentId) => void
+ *   onAction  — (commentId, action) => void
  */
-export function DiffHunk({ hunk, comments = [], viewMode, path, onReply, onResolve }) {
+export function DiffHunk({ hunk, comments = [], viewMode, path, onReply, onResolve, onAction }) {
   if (!hunk) return null
 
   // Build a map from line number to comments
@@ -83,6 +84,7 @@ export function DiffHunk({ hunk, comments = [], viewMode, path, onReply, onResol
                         line=${relevantLineNum}
                         onReply=${onReply}
                         onResolve=${onResolve}
+                        onAction=${onAction}
                       />
                     </div>
                   </div>
@@ -135,6 +137,7 @@ export function DiffHunk({ hunk, comments = [], viewMode, path, onReply, onResol
                     line=${leftLineNum}
                     onReply=${onReply}
                     onResolve=${onResolve}
+                    onAction=${onAction}
                   />
                 `}
               `
@@ -165,6 +168,7 @@ export function DiffHunk({ hunk, comments = [], viewMode, path, onReply, onResol
                     line=${rightLineNum}
                     onReply=${onReply}
                     onResolve=${onResolve}
+                    onAction=${onAction}
                   />
                 `}
               `

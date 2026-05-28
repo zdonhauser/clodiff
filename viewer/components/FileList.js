@@ -17,6 +17,7 @@ import { FileSection } from "./FileSection.js"
  *   onReply       — (commentId) => void
  *   onResolve     — (commentId) => void
  *   onFileRef     — (path, el) => void — callback for anchoring
+ *   onAction      — (commentId, action) => void
  */
 export function FileList({
   diff = [],
@@ -27,6 +28,7 @@ export function FileList({
   onReply,
   onResolve,
   onFileRef,
+  onAction,
 }) {
   if (diff.length === 0) {
     return html`
@@ -62,6 +64,7 @@ export function FileList({
             onReply=${onReply}
             onResolve=${onResolve}
             onRef=${handleRef}
+            onAction=${onAction}
           />
         `
       })}
