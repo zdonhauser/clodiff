@@ -130,6 +130,7 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
           if (url.pathname === "/resolve" && req.method === "POST") {
             return req.json().then((body: { comment_id: string }) => {
               try {
+                if (!body.comment_id) return new Response("comment_id required", { status: 400 })
                 const sessionPath = join(repoDir, ".review", "session.json")
                 if (!existsSync(sessionPath)) return new Response("Not Found", { status: 404 })
                 const raw = readFileSync(sessionPath, "utf-8")
