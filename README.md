@@ -4,6 +4,13 @@ A local code review viewer for Claude Code. Run it in any repo and Claude can na
 
 ![clodiff reviewing a pull request — PR meta bar, file tree, and inline Claude annotations](docs/screenshots/pr-review.png)
 
+<details>
+<summary>Prefer light mode? It follows your system theme.</summary>
+
+![clodiff in light mode](docs/screenshots/pr-review-light.png)
+
+</details>
+
 ---
 
 ## Installation
