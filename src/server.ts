@@ -219,7 +219,7 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
             }).catch(() => new Response("Invalid JSON", { status: 400 }))
           }
 
-          // POST /resolve — mark a comment as resolved in session.json
+          // POST /resolve — mark a comment as resolved; stage thread resolve for GitHub
           if (url.pathname === "/resolve" && req.method === "POST") {
             return req.json().then((body: { comment_id: string }) => {
               try {
@@ -229,19 +229,28 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
                 const raw = readFileSync(sessionPath, "utf-8")
                 const session = JSON.parse(raw) as SessionFile
                 let found = false
+                let resolvedComment: import("./session").ReviewComment | undefined
                 for (const review of session.reviews || []) {
                   for (const comment of review.comments || []) {
                     if (comment.id === body.comment_id) {
                       comment.resolved = true
+                      resolvedComment = comment
                       found = true
                     }
                   }
                 }
                 if (!found) return new Response("Comment not found", { status: 404 })
+                // Stage GitHub thread resolve for submission
+                if (resolvedComment?.github_thread_id) {
+                  if (!session.pending_resolves) session.pending_resolves = []
+                  if (!session.pending_resolves.includes(resolvedComment.github_thread_id)) {
+                    session.pending_resolves.push(resolvedComment.github_thread_id)
+                  }
+                }
                 session.updated_at = new Date().toISOString()
                 writeFileSync(sessionPath, JSON.stringify(session, null, 2))
                 for (const client of wsClients) {
-                  client.send(JSON.stringify({ type: "session_update" }))
+                  try { client.send(JSON.stringify({ type: "session_update" })) } catch { /* disconnected */ }
                 }
                 return new Response("OK", { status: 200 })
               } catch {
@@ -292,6 +301,16 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
                 }
                 const review = session.reviews[session.reviews.length - 1]
                 await pushReview(repoDir, prNumber, buildReviewPayload(review))
+                // Resolve any staged GitHub threads (best-effort, don't fail the push)
+                const { resolveThreads } = await import("./github")
+                const pendingResolves = session.pending_resolves ?? []
+                if (pendingResolves.length > 0) {
+                  await resolveThreads(repoDir, pendingResolves).catch(() => {})
+                  // Clear pending resolves after successful attempt
+                  session.pending_resolves = []
+                  session.updated_at = new Date().toISOString()
+                  writeFileSync(sessionPath, JSON.stringify(session, null, 2))
+                }
                 return new Response("OK", { status: 200 })
               } catch (err: unknown) {
                 return new Response(err instanceof Error ? err.message : "Unknown error", { status: 500 })
