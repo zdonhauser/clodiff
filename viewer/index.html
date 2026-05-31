@@ -11,104 +11,112 @@
       --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
       --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
-      /* ── Anthropic-inspired palette ─────────────────────────────────────
-         Warm off-white canvas · terracotta brand · ink text · muted warm grays
+      /* ── Blueprint palette ────────────────────────────────────────────────
+         Analogous blue harmony: blue-tinted canvas · cool blue-grey neutrals ·
+         cerulean accent (#0077b6) · deep ink text with blue undertone.
+         Diff greens/reds kept semantic but cooled to match the overall hue.
       ──────────────────────────────────────────────────────────────────── */
 
-      --color-bg: #faf7f2;
-      --color-canvas-subtle: #f2ede4;
-      --color-canvas-inset: #e9e2d8;
-      --color-border-default: #d6ccbf;
-      --color-border-muted: #e0d9ce;
-      --color-fg-default: #1a1714;
-      --color-fg-muted: #6b6257;
-      --color-fg-subtle: #9a8f83;
+      /* Canvas — not pure white; a whisper of blue makes the whole UI cohere */
+      --color-bg: #f4f8fd;
+      --color-canvas-subtle: #e8f0f8;
+      --color-canvas-inset: #dce8f3;
+      --color-border-default: #b8cedd;
+      --color-border-muted: #cad9e8;
 
-      /* Diff — keep semantic green/red, warm them slightly */
-      --color-added-bg: #edfbef;
-      --color-added-word-bg: #c6f0cd;
-      --color-added-gutter: #4a9e5c;
-      --color-removed-bg: #fdf0ee;
-      --color-removed-word-bg: #f5c8c3;
-      --color-removed-gutter: #c0453b;
+      /* Text — blue-tinted neutrals, never cold grey */
+      --color-fg-default: #0d1f2d;
+      --color-fg-muted: #4a6478;
+      --color-fg-subtle: #7a9aae;
 
-      /* Brand: Anthropic terracotta/coral */
-      --color-accent-fg: #c96442;
-      --color-accent-emphasis: #b85330;
-      --color-accent-subtle: #fdf0eb;
+      /* Diff — cooled to sit in the palette */
+      --color-added-bg: #eafaf0;
+      --color-added-word-bg: #c0ecd0;
+      --color-added-gutter: #3d9e56;
+      --color-removed-bg: #fdf0f0;
+      --color-removed-word-bg: #f5c8c5;
+      --color-removed-gutter: #b84040;
 
-      --color-success-fg: #2d7a3a;
-      --color-success-emphasis: #3a9148;
-      --color-attention-fg: #8a6500;
-      --color-danger-fg: #c0353a;
+      /* Brand: cerulean — saturated, authoritative, not the generic SaaS blue */
+      --color-accent-fg: #0077b6;
+      --color-accent-emphasis: #005f93;
+      --color-accent-subtle: #dff0f9;
 
-      --color-severity-error: #c0353a;
-      --color-severity-warning: #8a6500;
-      --color-severity-suggestion: #c96442;
-      --color-severity-note: #8a7d72;
+      --color-success-fg: #1a7a38;
+      --color-success-emphasis: #2a9648;
+      --color-attention-fg: #8a6200;
+      --color-danger-fg: #b83030;
 
-      --color-outdated-bg: #8a6500;
+      --color-severity-error: #b83030;
+      --color-severity-warning: #8a6200;
+      --color-severity-suggestion: #0077b6;
+      --color-severity-note: #7a9aae;
 
-      /* Hunk header: warm terracotta-tinted */
-      --color-hunk-bg: #fdf2ec;
-      --color-hunk-fg: #9a3e20;
-      --color-hunk-border: #f0cbb8;
+      --color-outdated-bg: #8a6200;
+
+      /* Hunk header: desaturated cerulean tint — clear blueprint feel */
+      --color-hunk-bg: #e4f2fa;
+      --color-hunk-fg: #005f93;
+      --color-hunk-border: #a8d4ec;
 
       --radius-sm: 5px;
       --radius-md: 7px;
       --radius-lg: 10px;
       --radius-full: 9999px;
 
-      --shadow-sm: 0 1px 2px rgba(60,30,10,0.06), 0 1px 3px rgba(60,30,10,0.04);
-      --shadow-md: 0 4px 6px rgba(60,30,10,0.07), 0 2px 4px rgba(60,30,10,0.05);
-      --shadow-lg: 0 10px 24px rgba(60,30,10,0.12), 0 4px 8px rgba(60,30,10,0.07);
+      /* Shadows tinted cool-blue for palette coherence */
+      --shadow-sm: 0 1px 2px rgba(10,30,60,0.07), 0 1px 3px rgba(10,30,60,0.05);
+      --shadow-md: 0 4px 6px rgba(10,30,60,0.08), 0 2px 4px rgba(10,30,60,0.06);
+      --shadow-lg: 0 10px 24px rgba(10,30,60,0.13), 0 4px 8px rgba(10,30,60,0.08);
     }
 
     @media (prefers-color-scheme: dark) {
       :root {
-        /* ── Anthropic dark — warm ink, not cold GitHub gray ────────────── */
-        --color-bg: #1c1814;
-        --color-canvas-subtle: #241f1a;
-        --color-canvas-inset: #161210;
-        --color-border-default: #3d3530;
-        --color-border-muted: #2e2822;
-        --color-fg-default: #f2ece4;
-        --color-fg-muted: #9e9087;
-        --color-fg-subtle: #7a6e66;
+        /* ── Midnight navy dark — deep ocean, not cold charcoal ──────────── */
+        --color-bg: #0d1b28;
+        --color-canvas-subtle: #132233;
+        --color-canvas-inset: #09131e;
+        --color-border-default: #1e3448;
+        --color-border-muted: #172c3e;
 
-        /* Diff — warm dark variants */
-        --color-added-bg: #0e2415;
-        --color-added-word-bg: #1a4025;
-        --color-added-gutter: #5aad6a;
-        --color-removed-bg: #2b1210;
-        --color-removed-word-bg: #4f1c1a;
-        --color-removed-gutter: #e05a52;
+        /* Text — blue-white tones, not stark */
+        --color-fg-default: #c8dde8;
+        --color-fg-muted: #6a90a8;
+        --color-fg-subtle: #486880;
 
-        /* Brand: Anthropic terracotta — warmer/brighter on dark */
-        --color-accent-fg: #e0835f;
-        --color-accent-emphasis: #cc6a44;
-        --color-accent-subtle: #2d1a12;
+        /* Diff — dark ocean variants */
+        --color-added-bg: #0c2418;
+        --color-added-word-bg: #184030;
+        --color-added-gutter: #4ab860;
+        --color-removed-bg: #271010;
+        --color-removed-word-bg: #481c1c;
+        --color-removed-gutter: #e05858;
 
-        --color-success-fg: #5cc46e;
-        --color-success-emphasis: #4aad5c;
+        /* Brand: sky cerulean — higher brightness needed for dark bg */
+        --color-accent-fg: #38bdf8;
+        --color-accent-emphasis: #0ea5e9;
+        --color-accent-subtle: #0c2d42;
+
+        --color-success-fg: #4ab860;
+        --color-success-emphasis: #38a050;
         --color-attention-fg: #d4a030;
-        --color-danger-fg: #e85e55;
+        --color-danger-fg: #e86060;
 
-        --color-severity-error: #e85e55;
+        --color-severity-error: #e86060;
         --color-severity-warning: #d4a030;
-        --color-severity-suggestion: #e0835f;
-        --color-severity-note: #9e9087;
+        --color-severity-suggestion: #38bdf8;
+        --color-severity-note: #6a90a8;
 
         --color-outdated-bg: #8a6500;
 
-        /* Hunk header: warm dark terracotta-tinted */
-        --color-hunk-bg: #271a14;
-        --color-hunk-fg: #e0835f;
-        --color-hunk-border: #4a2818;
+        /* Hunk header: deep ocean cerulean */
+        --color-hunk-bg: #0c2840;
+        --color-hunk-fg: #38bdf8;
+        --color-hunk-border: #1a4060;
 
-        --shadow-sm: 0 1px 2px rgba(0,0,0,0.35), 0 1px 3px rgba(0,0,0,0.25);
-        --shadow-md: 0 4px 6px rgba(0,0,0,0.30), 0 2px 4px rgba(0,0,0,0.25);
-        --shadow-lg: 0 10px 24px rgba(0,0,0,0.50), 0 4px 8px rgba(0,0,0,0.30);
+        --shadow-sm: 0 1px 2px rgba(0,10,30,0.40), 0 1px 3px rgba(0,10,30,0.30);
+        --shadow-md: 0 4px 6px rgba(0,10,30,0.35), 0 2px 4px rgba(0,10,30,0.28);
+        --shadow-lg: 0 10px 24px rgba(0,10,30,0.55), 0 4px 8px rgba(0,10,30,0.35);
       }
     }
 
