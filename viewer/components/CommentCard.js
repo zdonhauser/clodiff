@@ -18,6 +18,48 @@ function MarkdownBody({ text, style = {} }) {
   return html`<div ref=${ref} class="md-body" style=${style} />`
 }
 
+// Shared button styles — keeps all card buttons consistent
+const BTN_BASE = {
+  padding: "4px 10px",
+  fontSize: "12px",
+  fontWeight: "500",
+  lineHeight: "1.4",
+  borderRadius: "var(--radius-sm)",
+  cursor: "pointer",
+  border: "1px solid var(--color-border-default)",
+  background: "transparent",
+  color: "var(--color-fg-muted)",
+  fontFamily: "var(--font-ui)",
+  display: "inline-flex",
+  alignItems: "center",
+  whiteSpace: "nowrap",
+}
+const BTN_DEFAULT = { ...BTN_BASE, color: "var(--color-fg-default)" }
+const BTN_PRIMARY = {
+  ...BTN_BASE,
+  background: "var(--color-accent-emphasis)",
+  color: "#fff",
+  border: "1px solid transparent",
+  fontWeight: "600",
+}
+const BTN_DANGER = {
+  ...BTN_BASE,
+  color: "var(--color-fg-muted)",
+}
+const BTN_ICON = {
+  padding: "3px 7px",
+  fontSize: "12px",
+  lineHeight: "1.4",
+  borderRadius: "var(--radius-sm)",
+  cursor: "pointer",
+  border: "1px solid var(--color-border-default)",
+  background: "transparent",
+  color: "var(--color-fg-default)",
+  fontFamily: "var(--font-ui)",
+  display: "inline-flex",
+  alignItems: "center",
+}
+
 const SEVERITY_COLORS = {
   error: "var(--color-severity-error)",
   warning: "var(--color-severity-warning)",
@@ -248,8 +290,8 @@ export function CommentCard({ comment, onReply, onResolve, onAction, getNavInfo,
           />
           <div style=${{ display: "flex", gap: "6px", marginTop: "6px", justifyContent: "flex-end" }}>
             <span style=${{ fontSize: "11px", color: "var(--color-fg-subtle)", alignSelf: "center", marginRight: "auto" }}>⌘↵ save · Esc cancel</span>
-            <button onClick=${handleEditCancel} style=${{ padding: "3px 10px", background: "transparent", border: "1px solid var(--color-border-default)", borderRadius: "var(--radius-sm)", color: "var(--color-fg-muted)", fontSize: "12px", cursor: "pointer" }}>Cancel</button>
-            <button onClick=${handleEditSave} style=${{ padding: "3px 10px", background: "var(--color-accent-emphasis)", border: "none", borderRadius: "var(--radius-sm)", color: "#fff", fontSize: "12px", cursor: "pointer", fontWeight: "500" }}>Save</button>
+            <button onClick=${handleEditCancel} style=${BTN_BASE}>Cancel</button>
+            <button onClick=${handleEditSave} style=${BTN_PRIMARY}>Save</button>
           </div>
         </div>
       ` : html`
@@ -318,28 +360,11 @@ export function CommentCard({ comment, onReply, onResolve, onAction, getNavInfo,
                   }}>
                     <button
                       onClick=${() => onAction?.(comment.id, "fix")}
-                      style=${{
-                        padding: "3px 10px",
-                        background: "var(--color-accent-emphasis)",
-                        border: "1px solid transparent",
-                        borderRadius: "var(--radius-sm)",
-                        color: "#ffffff",
-                        fontSize: "12px",
-                        cursor: "pointer",
-                        fontWeight: "500",
-                      }}
+                      style=${BTN_PRIMARY}
                     >Fix It</button>
                     <button
                       onClick=${() => onAction?.(comment.id, "reject")}
-                      style=${{
-                        padding: "3px 10px",
-                        background: "transparent",
-                        border: "1px solid var(--color-border-default)",
-                        borderRadius: "var(--radius-sm)",
-                        color: "var(--color-fg-muted)",
-                        fontSize: "12px",
-                        cursor: "pointer",
-                      }}
+                      style=${BTN_DANGER}
                     >Reject</button>
                   </div>
                 `}
@@ -398,72 +423,30 @@ export function CommentCard({ comment, onReply, onResolve, onAction, getNavInfo,
           borderTop: "1px solid var(--color-border-muted)",
           background: "var(--color-canvas-subtle)",
         }}>
-          <button
-            onClick=${handleReply}
-            style=${{
-              padding: "3px 10px",
-              background: "transparent",
-              border: "1px solid var(--color-border-default)",
-              borderRadius: "var(--radius-sm)",
-              color: "var(--color-fg-default)",
-              fontSize: "12px",
-              cursor: "pointer",
-            }}
-          >Reply</button>
-          <button
-            onClick=${handleEditStart}
-            title="Edit comment"
-            style=${{
-              padding: "3px 10px",
-              background: "transparent",
-              border: "1px solid var(--color-border-default)",
-              borderRadius: "var(--radius-sm)",
-              color: "var(--color-fg-muted)",
-              fontSize: "12px",
-              cursor: "pointer",
-            }}
-          >Edit</button>
-          <button
-            onClick=${handleResolve}
-            style=${{
-              padding: "3px 10px",
-              background: "transparent",
-              border: "1px solid var(--color-border-default)",
-              borderRadius: "var(--radius-sm)",
-              color: "var(--color-fg-muted)",
-              fontSize: "12px",
-              cursor: "pointer",
-            }}
-          >Resolve</button>
+          <button onClick=${handleReply} style=${BTN_DEFAULT}>Reply</button>
+          <button onClick=${handleEditStart} title="Edit comment" style=${BTN_BASE}>Edit</button>
+          <button onClick=${handleResolve} style=${BTN_BASE}>Resolve</button>
 
           <!-- Severity-ordered prev/next navigation -->
           ${navInfo && html`
-            <div style=${{ display: "flex", alignItems: "center", gap: "2px", marginLeft: "2px" }}>
+            <div style=${{ display: "flex", alignItems: "center", gap: "2px", marginLeft: "auto" }}>
               <button
                 onClick=${() => navInfo.prevId && onNavigate?.(navInfo.prevId)}
                 disabled=${!navInfo.prevId}
                 title="Previous comment"
-                style=${{
-                  padding: "2px 6px",
-                  background: "transparent",
-                  border: "1px solid var(--color-border-default)",
-                  borderRadius: "var(--radius-sm)",
-                  color: navInfo.prevId ? "var(--color-fg-default)" : "var(--color-fg-subtle)",
-                  fontSize: "11px",
-                  cursor: navInfo.prevId ? "pointer" : "default",
-                  lineHeight: 1,
-                }}
+                style=${BTN_ICON}
               >↑</button>
               <span style=${{
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "4px",
-                padding: "2px 6px",
+                padding: "3px 7px",
                 border: "1px solid var(--color-border-muted)",
                 borderRadius: "var(--radius-sm)",
                 fontSize: "11px",
                 color: "var(--color-fg-muted)",
                 userSelect: "none",
+                lineHeight: "1.4",
               }}>
                 <span style=${{ width: "6px", height: "6px", borderRadius: "50%", background: navColor, flexShrink: 0 }} />
                 ${navInfo.index + 1}/${navInfo.total}
@@ -472,46 +455,14 @@ export function CommentCard({ comment, onReply, onResolve, onAction, getNavInfo,
                 onClick=${() => navInfo.nextId && onNavigate?.(navInfo.nextId)}
                 disabled=${!navInfo.nextId}
                 title="Next comment"
-                style=${{
-                  padding: "2px 6px",
-                  background: "transparent",
-                  border: "1px solid var(--color-border-default)",
-                  borderRadius: "var(--radius-sm)",
-                  color: navInfo.nextId ? "var(--color-fg-default)" : "var(--color-fg-subtle)",
-                  fontSize: "11px",
-                  cursor: navInfo.nextId ? "pointer" : "default",
-                  lineHeight: 1,
-                }}
+                style=${BTN_ICON}
               >↓</button>
             </div>
           `}
 
           ${comment.source === "claude-code" && html`
-            <button
-              onClick=${() => onAction?.(comment.id, "fix")}
-              style=${{
-                padding: "3px 10px",
-                background: "var(--color-accent-emphasis)",
-                border: "1px solid transparent",
-                borderRadius: "var(--radius-sm)",
-                color: "#ffffff",
-                fontSize: "12px",
-                cursor: "pointer",
-                fontWeight: "500",
-              }}
-            >Fix It</button>
-            <button
-              onClick=${() => onAction?.(comment.id, "reject")}
-              style=${{
-                padding: "3px 10px",
-                background: "transparent",
-                border: "1px solid var(--color-border-default)",
-                borderRadius: "var(--radius-sm)",
-                color: "var(--color-fg-muted)",
-                fontSize: "12px",
-                cursor: "pointer",
-              }}
-            >Reject</button>
+            <button onClick=${() => onAction?.(comment.id, "fix")} style=${BTN_PRIMARY}>Fix It</button>
+            <button onClick=${() => onAction?.(comment.id, "reject")} style=${BTN_DANGER}>Reject</button>
           `}
         </div>
       `}
