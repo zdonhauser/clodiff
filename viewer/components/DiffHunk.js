@@ -21,12 +21,12 @@ export function DiffHunk({ hunk, comments = [], viewMode, path, onReply, onResol
     display: "flex",
     alignItems: "center",
     padding: "4px 16px",
-    background: "#ddf4ff",
-    color: "#0969da",
+    background: "var(--color-hunk-bg)",
+    color: "var(--color-hunk-fg)",
     fontFamily: "var(--font-mono)",
     fontSize: "var(--font-code-size)",
-    borderTop: "1px solid #b6e3ff",
-    borderBottom: "1px solid #b6e3ff",
+    borderTop: "1px solid var(--color-hunk-border)",
+    borderBottom: "1px solid var(--color-hunk-border)",
     userSelect: "none",
   }
 

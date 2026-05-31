@@ -85,10 +85,10 @@ export function Header({ session, comments = [], fileCount, wsStatus, viewMode, 
   const WsIndicator = () => {
     const color =
       wsStatus === "connected"
-        ? "#1a7f37"
+        ? "var(--color-success-fg)"
         : wsStatus === "reconnecting"
-        ? "#9a6700"
-        : "#6e7781"
+        ? "var(--color-attention-fg)"
+        : "var(--color-fg-subtle)"
     const label =
       wsStatus === "connected"
         ? "Connected"
@@ -126,15 +126,20 @@ export function Header({ session, comments = [], fileCount, wsStatus, viewMode, 
   }
 
   const btnBase = {
-    padding: "4px 12px",
+    padding: "5px 12px",
     fontSize: "13px",
     fontWeight: "500",
+    lineHeight: "1.4",
     borderRadius: "var(--radius-sm)",
     cursor: "pointer",
     border: "1px solid var(--color-border-default)",
     fontFamily: "var(--font-ui)",
+    background: "var(--color-bg)",
+    color: "var(--color-fg-default)",
     flexShrink: 0,
     whiteSpace: "nowrap",
+    display: "inline-flex",
+    alignItems: "center",
   }
 
   return html`
@@ -144,26 +149,34 @@ export function Header({ session, comments = [], fileCount, wsStatus, viewMode, 
       zIndex: 100,
       background: "var(--color-canvas-subtle)",
       borderBottom: "1px solid var(--color-border-default)",
-      boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+      boxShadow: "var(--shadow-sm)",
     }}>
       <!-- PR meta bar — shown when reviewing a PR -->
       ${session?.pr_meta && html`
         <div style=${{
           display: "flex",
           alignItems: "center",
-          gap: "8px",
-          padding: "5px 12px",
-          background: "var(--color-canvas-default, var(--color-bg))",
-          borderBottom: "1px solid var(--color-border-muted)",
+          gap: "10px",
+          padding: "4px 16px",
+          background: "var(--color-accent-subtle)",
+          borderBottom: "1px solid var(--color-accent-emphasis)22",
           fontSize: "12px",
           flexWrap: "nowrap",
           overflow: "hidden",
         }}>
-          <!-- PR number -->
-          <span style=${{ color: "var(--color-fg-muted)", flexShrink: 0, fontWeight: "500" }}>
-            PR #${session.pr_meta.number}
+          <!-- PR number badge -->
+          <span style=${{
+            color: "var(--color-accent-emphasis)",
+            flexShrink: 0,
+            fontWeight: "700",
+            background: "var(--color-accent-emphasis)16",
+            border: "1px solid var(--color-accent-emphasis)30",
+            borderRadius: "var(--radius-sm)",
+            padding: "0px 6px",
+            letterSpacing: "0.01em",
+          }}>
+            #${session.pr_meta.number}
           </span>
-          <span style=${{ color: "var(--color-border-default)" }}>·</span>
           <!-- Title -->
           <span style=${{
             color: "var(--color-fg-default)",
@@ -180,14 +193,30 @@ export function Header({ session, comments = [], fileCount, wsStatus, viewMode, 
           </span>
           <!-- CI status -->
           ${session.pr_meta.checks_status && session.pr_meta.checks_status !== "neutral" && html`
-            <span style=${{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: "4px", whiteSpace: "nowrap" }}>
+            <span style=${{
+              flexShrink: 0,
+              display: "inline-flex", alignItems: "center", gap: "5px",
+              whiteSpace: "nowrap",
+              padding: "1px 6px",
+              borderRadius: "var(--radius-full)",
+              fontSize: "11px",
+              fontWeight: "600",
+              background: session.pr_meta.checks_status === "success" ? "var(--color-success-fg)18"
+                : session.pr_meta.checks_status === "failure" ? "var(--color-danger-fg)18"
+                : "var(--color-attention-fg)18",
+              color: session.pr_meta.checks_status === "success" ? "var(--color-success-fg)"
+                : session.pr_meta.checks_status === "failure" ? "var(--color-danger-fg)"
+                : "var(--color-attention-fg)",
+              border: "1px solid currentColor",
+              borderColor: session.pr_meta.checks_status === "success" ? "var(--color-success-fg)40"
+                : session.pr_meta.checks_status === "failure" ? "var(--color-danger-fg)40"
+                : "var(--color-attention-fg)40",
+            }}>
               <span style=${{
-                width: "7px", height: "7px", borderRadius: "50%", flexShrink: 0,
-                background: session.pr_meta.checks_status === "success" ? "#1a7f37"
-                  : session.pr_meta.checks_status === "failure" ? "#cf222e"
-                  : "#9a6700",
+                width: "6px", height: "6px", borderRadius: "50%", flexShrink: 0,
+                background: "currentColor",
               }} />
-              <span style=${{ color: "var(--color-fg-muted)" }}>
+              <span>
                 ${session.pr_meta.checks_status === "success" ? "CI passing"
                   : session.pr_meta.checks_status === "failure" ? "CI failing"
                   : "CI pending"}
@@ -334,9 +363,14 @@ export function Header({ session, comments = [], fileCount, wsStatus, viewMode, 
           disabled=${pushStatus === "pushing"}
           style=${{
             ...btnBase,
-            background: pushStatus === "error" ? "var(--color-danger-fg)" : "#2da44e",
+            background: pushStatus === "error"
+              ? "var(--color-danger-fg)"
+              : pushStatus === "done"
+              ? "var(--color-success-emphasis)"
+              : "var(--color-accent-emphasis)",
             color: "#ffffff",
-            border: "none",
+            border: "1px solid transparent",
+            fontWeight: "600",
           }}
         >
           ${pushStatus === "pushing" ? "Submitting…"

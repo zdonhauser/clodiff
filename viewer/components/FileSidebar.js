@@ -80,7 +80,7 @@ function FileEntry({ file, commentCount, onNavigate }) {
       ${commentCount > 0 && html`
         <span style=${{
           background: "var(--color-accent-emphasis)",
-          color: "#fff",
+          color: "#ffffff",
           borderRadius: "10px",
           padding: "0 5px",
           fontSize: "10px",
@@ -133,7 +133,7 @@ function DirGroup({ dir, files, commentsByPath, openDirs, onToggleDir, onNavigat
         ${totalComments > 0 && !isOpen && html`
           <span style=${{
             background: "var(--color-accent-emphasis)",
-            color: "#fff",
+            color: "#ffffff",
             borderRadius: "10px",
             padding: "0 5px",
             fontSize: "10px",

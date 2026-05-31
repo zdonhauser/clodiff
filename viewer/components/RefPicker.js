@@ -71,10 +71,10 @@ export function RefPicker({ value, label, onSelect }) {
         title=${"Change " + label + " ref"}
         style=${{
           padding: "1px 8px",
-          background: isBase ? "var(--color-canvas-subtle)" : "#ddf4ff",
-          border: isBase ? "1px solid var(--color-border-default)" : "1px solid #b6e3ff",
+          background: isBase ? "var(--color-canvas-subtle)" : "var(--color-accent-subtle)",
+          border: isBase ? "1px solid var(--color-border-default)" : "1px solid var(--color-accent-emphasis)44",
           borderRadius: "var(--radius-sm)",
-          color: isBase ? "var(--color-fg-muted)" : "#0969da",
+          color: isBase ? "var(--color-fg-muted)" : "var(--color-accent-emphasis)",
           fontFamily: "var(--font-mono)",
           fontSize: "12px",
           cursor: "pointer",

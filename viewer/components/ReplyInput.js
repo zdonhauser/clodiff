@@ -104,31 +104,20 @@ export function ReplyInput({ commentId, onClose, onReply }) {
             onClick=${onClose}
             disabled=${submitting}
             style=${{
-              padding: "4px 12px",
-              background: "transparent",
-              border: "1px solid var(--color-border-default)",
-              borderRadius: "var(--radius-sm)",
-              color: "var(--color-fg-default)",
-              fontSize: "13px",
-              cursor: "pointer",
+              padding: "5px 12px", fontSize: "13px", fontWeight: "500",
+              background: "transparent", border: "1px solid var(--color-border-default)",
+              borderRadius: "var(--radius-sm)", color: "var(--color-fg-default)", cursor: "pointer",
+              fontFamily: "var(--font-ui)", lineHeight: "1.4",
             }}
           >Cancel</button>
           <button
             onClick=${submit}
             disabled=${submitting || !body.trim()}
             style=${{
-              padding: "4px 12px",
-              background: submitting || !body.trim()
-                ? "var(--color-canvas-subtle)"
-                : "var(--color-accent-emphasis)",
-              border: "1px solid transparent",
-              borderRadius: "var(--radius-sm)",
-              color: submitting || !body.trim()
-                ? "var(--color-fg-muted)"
-                : "#ffffff",
-              fontSize: "13px",
-              cursor: submitting || !body.trim() ? "not-allowed" : "pointer",
-              fontWeight: "500",
+              padding: "5px 12px", fontSize: "13px", fontWeight: "600",
+              background: "var(--color-accent-emphasis)", border: "1px solid transparent",
+              borderRadius: "var(--radius-sm)", color: "#ffffff", cursor: "pointer",
+              fontFamily: "var(--font-ui)", lineHeight: "1.4",
             }}
           >${submitting ? "Sending…" : "Reply"}</button>
         </div>
