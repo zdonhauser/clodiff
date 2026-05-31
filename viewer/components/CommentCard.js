@@ -200,33 +200,109 @@ export function CommentCard({ comment, onReply, onResolve, onAction, getNavInfo,
           borderTop: "1px solid var(--color-border-muted)",
           padding: "0 12px",
         }}>
-          ${comment.replies.map((reply, i) => html`
-            <div key=${reply.id || i} style=${{
-              padding: "8px 0",
-              borderBottom: i < comment.replies.length - 1 ? "1px solid var(--color-border-muted)" : "none",
-            }}>
-              <div style=${{ display: "flex", gap: "8px", alignItems: "flex-start" }}>
-                <${Avatar} label=${reply.source || "user"} />
-                <div style=${{ flex: 1 }}>
-                  <div style=${{ display: "flex", gap: "6px", alignItems: "center", marginBottom: "4px" }}>
-                    <${SourceLabel} source=${reply.source || "user"} />
-                    ${reply.created_at && html`
-                      <span style=${{
-                        fontSize: "12px",
-                        color: "var(--color-fg-subtle)",
-                      }}>${new Date(reply.created_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
-                    `}
+          ${comment.replies.map((reply, i) => reply.source === "claude-code"
+            ? html`
+              <!-- Claude reply — mini annotation card with Fix It -->
+              <div key=${reply.id || i} style=${{
+                margin: "8px 0",
+                border: "1px solid var(--color-border-default)",
+                borderRadius: "var(--radius-md)",
+                overflow: "hidden",
+                borderBottom: i < comment.replies.length - 1 ? undefined : "none",
+              }}>
+                <div style=${{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  padding: "6px 10px",
+                  background: "var(--color-canvas-subtle)",
+                  borderBottom: "1px solid var(--color-border-muted)",
+                }}>
+                  <${Avatar} label="claude-code" />
+                  <div style=${{ display: "flex", alignItems: "center", gap: "6px", flex: 1, flexWrap: "wrap" }}>
+                    <${SourceLabel} source="claude-code" />
+                    ${reply.severity && html`<${SeverityBadge} severity=${reply.severity} />`}
                   </div>
+                  ${reply.created_at && html`
+                    <span style=${{ fontSize: "12px", color: "var(--color-fg-subtle)", whiteSpace: "nowrap" }}>
+                      ${new Date(reply.created_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                    </span>
+                  `}
+                </div>
+                <div style=${{
+                  padding: "10px 12px",
+                  fontSize: "var(--font-code-size)",
+                  lineHeight: "1.6",
+                  color: "var(--color-fg-default)",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                }}>${reply.body}</div>
+                ${!comment.resolved && html`
                   <div style=${{
-                    fontSize: "var(--font-code-size)",
-                    lineHeight: "1.5",
-                    color: "var(--color-fg-default)",
-                    whiteSpace: "pre-wrap",
-                  }}>${reply.body}</div>
+                    display: "flex",
+                    gap: "8px",
+                    padding: "5px 10px",
+                    borderTop: "1px solid var(--color-border-muted)",
+                    background: "var(--color-canvas-subtle)",
+                  }}>
+                    <button
+                      onClick=${() => onAction?.(comment.id, "fix")}
+                      style=${{
+                        padding: "3px 10px",
+                        background: "var(--color-accent-emphasis)",
+                        border: "1px solid transparent",
+                        borderRadius: "var(--radius-sm)",
+                        color: "#ffffff",
+                        fontSize: "12px",
+                        cursor: "pointer",
+                        fontWeight: "500",
+                      }}
+                    >Fix It</button>
+                    <button
+                      onClick=${() => onAction?.(comment.id, "reject")}
+                      style=${{
+                        padding: "3px 10px",
+                        background: "transparent",
+                        border: "1px solid var(--color-border-default)",
+                        borderRadius: "var(--radius-sm)",
+                        color: "var(--color-fg-muted)",
+                        fontSize: "12px",
+                        cursor: "pointer",
+                      }}
+                    >Reject</button>
+                  </div>
+                `}
+              </div>
+            `
+            : html`
+              <!-- User reply — simple bubble -->
+              <div key=${reply.id || i} style=${{
+                padding: "8px 0",
+                borderBottom: i < comment.replies.length - 1 ? "1px solid var(--color-border-muted)" : "none",
+              }}>
+                <div style=${{ display: "flex", gap: "8px", alignItems: "flex-start" }}>
+                  <${Avatar} label=${reply.source || "user"} />
+                  <div style=${{ flex: 1 }}>
+                    <div style=${{ display: "flex", gap: "6px", alignItems: "center", marginBottom: "4px" }}>
+                      <${SourceLabel} source=${reply.source || "user"} />
+                      ${reply.created_at && html`
+                        <span style=${{
+                          fontSize: "12px",
+                          color: "var(--color-fg-subtle)",
+                        }}>${new Date(reply.created_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+                      `}
+                    </div>
+                    <div style=${{
+                      fontSize: "var(--font-code-size)",
+                      lineHeight: "1.5",
+                      color: "var(--color-fg-default)",
+                      whiteSpace: "pre-wrap",
+                    }}>${reply.body}</div>
+                  </div>
                 </div>
               </div>
-            </div>
-          `)}
+            `
+          )}
         </div>
       `}
 

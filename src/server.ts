@@ -98,25 +98,58 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
             }
           }
 
-          // POST /reply — append a reply to replies.json
+          // POST /reply — append a reply to session.json + replies.json (user only)
+          // Accepts optional source: "user" | "claude-code" (default "user")
           if (url.pathname === "/reply" && req.method === "POST") {
-            return req.json().then((body: { comment_id: string; body: string }) => {
+            return req.json().then((body: { comment_id: string; body: string; source?: string; severity?: string }) => {
               try {
-                const repliesPath = join(repoDir, ".review", "replies.json")
-                let replies: ReplyEntry[] = []
-                if (existsSync(repliesPath)) {
-                  const raw = readFileSync(repliesPath, "utf-8")
-                  replies = JSON.parse(raw) as ReplyEntry[]
+                const source = body.source === "claude-code" ? "claude-code" : "user"
+                const replyId = crypto.randomUUID()
+                const replyCreatedAt = new Date().toISOString()
+
+                // Persist reply into session.json so the viewer renders it
+                const sessionFilePath = join(repoDir, ".review", "session.json")
+                if (existsSync(sessionFilePath)) {
+                  const sessionRaw = readFileSync(sessionFilePath, "utf-8")
+                  const session = JSON.parse(sessionRaw) as SessionFile
+                  for (const review of session.reviews || []) {
+                    const parent = (review.comments || []).find((c) => c.id === body.comment_id)
+                    if (parent) {
+                      if (!parent.replies) parent.replies = []
+                      parent.replies.push({
+                        id: replyId,
+                        created_at: replyCreatedAt,
+                        source: source as "claude-code" | "user",
+                        body: body.body,
+                        severity: (body.severity as "error" | "warning" | "suggestion" | "note") || undefined,
+                        path: parent.path,
+                        commit_id: parent.commit_id,
+                        line: parent.line,
+                        side: parent.side,
+                      })
+                      session.updated_at = replyCreatedAt
+                      writeFileSync(sessionFilePath, JSON.stringify(session, null, 2))
+                      for (const client of wsClients) {
+                        try { client.send(JSON.stringify({ type: "session_update" })) } catch { /* disconnected */ }
+                      }
+                      break
+                    }
+                  }
                 }
-                const entry: ReplyEntry = {
-                  id: crypto.randomUUID(),
-                  comment_id: body.comment_id,
-                  body: body.body,
-                  created_at: new Date().toISOString(),
+
+                // Write to replies.json for monitor (user replies only — Claude doesn't need its own replies)
+                if (source === "user") {
+                  const repliesFilePath = join(repoDir, ".review", "replies.json")
+                  let replies: ReplyEntry[] = []
+                  if (existsSync(repliesFilePath)) {
+                    const raw = readFileSync(repliesFilePath, "utf-8")
+                    replies = JSON.parse(raw) as ReplyEntry[]
+                  }
+                  replies.push({ id: replyId, comment_id: body.comment_id, body: body.body, created_at: replyCreatedAt })
+                  writeFileSync(repliesFilePath, JSON.stringify(replies, null, 2))
                 }
-                replies.push(entry)
-                writeFileSync(repliesPath, JSON.stringify(replies, null, 2))
-                return new Response(JSON.stringify(entry), {
+
+                return new Response(JSON.stringify({ id: replyId, comment_id: body.comment_id }), {
                   status: 200,
                   headers: { "Content-Type": "application/json" },
                 })
