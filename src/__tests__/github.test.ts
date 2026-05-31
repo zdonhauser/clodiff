@@ -165,7 +165,7 @@ describe("fetchPRInfo", () => {
     state: "OPEN",
     baseRefName: "main",
     headRefName: "feat/auth",
-    headSha: "deadbeef",
+    headRefOid: "deadbeef",
     statusCheckRollup: [
       { state: "SUCCESS" },
       { state: "SUCCESS" },
@@ -192,7 +192,7 @@ describe("fetchPRInfo", () => {
   it("returns checks_status failure when any check fails", async () => {
     const out = JSON.stringify({
       number: 1, title: "t", author: { login: "u" }, body: "", state: "OPEN",
-      baseRefName: "main", headRefName: "b", headSha: "abc",
+      baseRefName: "main", headRefName: "b", headRefOid: "abc",
       statusCheckRollup: [{ state: "FAILURE" }, { state: "SUCCESS" }],
     })
     const { spawn } = makeSpawn([{ exitCode: 0, stdout: out }])
@@ -203,7 +203,7 @@ describe("fetchPRInfo", () => {
   it("returns checks_status pending when any check is pending", async () => {
     const out = JSON.stringify({
       number: 1, title: "t", author: { login: "u" }, body: "", state: "OPEN",
-      baseRefName: "main", headRefName: "b", headSha: "abc",
+      baseRefName: "main", headRefName: "b", headRefOid: "abc",
       statusCheckRollup: [{ state: "EXPECTED" }, { state: "SUCCESS" }],
     })
     const { spawn } = makeSpawn([{ exitCode: 0, stdout: out }])
@@ -214,7 +214,7 @@ describe("fetchPRInfo", () => {
   it("returns neutral when statusCheckRollup is empty", async () => {
     const out = JSON.stringify({
       number: 1, title: "t", author: { login: "u" }, body: "", state: "OPEN",
-      baseRefName: "main", headRefName: "b", headSha: "abc",
+      baseRefName: "main", headRefName: "b", headRefOid: "abc",
       statusCheckRollup: [],
     })
     const { spawn } = makeSpawn([{ exitCode: 0, stdout: out }])

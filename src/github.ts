@@ -61,11 +61,15 @@ async function getRepoOwnerName(
   return { owner: data.owner.login, name: data.name }
 }
 
-function deriveChecksStatus(rollup: Array<{ state: string }>): PRMeta["checks_status"] {
+function deriveChecksStatus(rollup: Array<Record<string, unknown>>): PRMeta["checks_status"] {
   if (!rollup || rollup.length === 0) return "neutral"
-  const states = rollup.map((r) => r.state.toUpperCase())
-  if (states.some((s) => s === "FAILURE" || s === "ERROR")) return "failure"
-  if (states.some((s) => !["SUCCESS", "NEUTRAL", "SKIPPED"].includes(s))) return "pending"
+  // CheckRun uses `conclusion`/`status`; StatusContext uses `state`
+  const states = rollup.map((r) => {
+    const v = (r.conclusion ?? r.state ?? r.status ?? "PENDING") as string
+    return v.toUpperCase()
+  })
+  if (states.some((s) => s === "FAILURE" || s === "ERROR" || s === "TIMED_OUT" || s === "CANCELLED")) return "failure"
+  if (states.some((s) => !["SUCCESS", "NEUTRAL", "SKIPPED", ""].includes(s))) return "pending"
   return "success"
 }
 
@@ -74,7 +78,7 @@ export async function fetchPRInfo(
   prNumber?: number,
   _spawn: typeof Bun.spawn = Bun.spawn,
 ): Promise<PRInfo | null> {
-  const fields = "number,title,author,body,state,baseRefName,headRefName,headSha,statusCheckRollup"
+  const fields = "number,title,author,body,state,baseRefName,headRefName,headRefOid,statusCheckRollup"
   const argv = prNumber !== undefined
     ? ["gh", "pr", "view", String(prNumber), "--json", fields]
     : ["gh", "pr", "view", "--json", fields]
@@ -92,7 +96,7 @@ export async function fetchPRInfo(
       state: string
       baseRefName: string
       headRefName: string
-      headSha: string
+      headRefOid: string
       statusCheckRollup: Array<{ state: string }>
     }
     return {
@@ -103,7 +107,7 @@ export async function fetchPRInfo(
       state: d.state,
       baseRefName: d.baseRefName,
       headRefName: d.headRefName,
-      headSha: d.headSha,
+      headSha: d.headRefOid,
       checks_status: deriveChecksStatus(d.statusCheckRollup ?? []),
     }
   } catch {
