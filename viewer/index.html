@@ -11,97 +11,104 @@
       --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
       --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
-      --color-bg: #ffffff;
-      --color-canvas-subtle: #f6f8fa;
-      --color-canvas-inset: #f0f2f4;
-      --color-border-default: #d0d7de;
-      --color-border-muted: #d8dee4;
-      --color-fg-default: #1c2128;
-      --color-fg-muted: #57606a;
-      --color-fg-subtle: #6e7781;
+      /* ── Anthropic-inspired palette ─────────────────────────────────────
+         Warm off-white canvas · terracotta brand · ink text · muted warm grays
+      ──────────────────────────────────────────────────────────────────── */
 
-      --color-added-bg: #e6ffec;
-      --color-added-word-bg: #abf2bc;
-      --color-added-gutter: #57ab5a;
-      --color-removed-bg: #ffebe9;
-      --color-removed-word-bg: #ffc1ba;
-      --color-removed-gutter: #e5534b;
+      --color-bg: #faf7f2;
+      --color-canvas-subtle: #f2ede4;
+      --color-canvas-inset: #e9e2d8;
+      --color-border-default: #d6ccbf;
+      --color-border-muted: #e0d9ce;
+      --color-fg-default: #1a1714;
+      --color-fg-muted: #6b6257;
+      --color-fg-subtle: #9a8f83;
 
-      /* Brand: indigo/violet */
-      --color-accent-fg: #6366f1;
-      --color-accent-emphasis: #4f46e5;
-      --color-accent-subtle: #eef2ff;
+      /* Diff — keep semantic green/red, warm them slightly */
+      --color-added-bg: #edfbef;
+      --color-added-word-bg: #c6f0cd;
+      --color-added-gutter: #4a9e5c;
+      --color-removed-bg: #fdf0ee;
+      --color-removed-word-bg: #f5c8c3;
+      --color-removed-gutter: #c0453b;
 
-      --color-success-fg: #1a7f37;
-      --color-success-emphasis: #2da44e;
-      --color-attention-fg: #9a6700;
-      --color-danger-fg: #cf222e;
+      /* Brand: Anthropic terracotta/coral */
+      --color-accent-fg: #c96442;
+      --color-accent-emphasis: #b85330;
+      --color-accent-subtle: #fdf0eb;
 
-      --color-severity-error: #cf222e;
-      --color-severity-warning: #9a6700;
-      --color-severity-suggestion: #6366f1;
-      --color-severity-note: #6e7781;
+      --color-success-fg: #2d7a3a;
+      --color-success-emphasis: #3a9148;
+      --color-attention-fg: #8a6500;
+      --color-danger-fg: #c0353a;
 
-      --color-outdated-bg: #9a6700;
+      --color-severity-error: #c0353a;
+      --color-severity-warning: #8a6500;
+      --color-severity-suggestion: #c96442;
+      --color-severity-note: #8a7d72;
 
-      /* Hunk header: indigo-tinted */
-      --color-hunk-bg: #eff1fe;
-      --color-hunk-fg: #4338ca;
-      --color-hunk-border: #c7d2fe;
+      --color-outdated-bg: #8a6500;
+
+      /* Hunk header: warm terracotta-tinted */
+      --color-hunk-bg: #fdf2ec;
+      --color-hunk-fg: #9a3e20;
+      --color-hunk-border: #f0cbb8;
 
       --radius-sm: 5px;
       --radius-md: 7px;
       --radius-lg: 10px;
       --radius-full: 9999px;
 
-      --shadow-sm: 0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
-      --shadow-md: 0 4px 6px rgba(0,0,0,0.05), 0 2px 4px rgba(0,0,0,0.06);
-      --shadow-lg: 0 10px 24px rgba(0,0,0,0.10), 0 4px 8px rgba(0,0,0,0.06);
+      --shadow-sm: 0 1px 2px rgba(60,30,10,0.06), 0 1px 3px rgba(60,30,10,0.04);
+      --shadow-md: 0 4px 6px rgba(60,30,10,0.07), 0 2px 4px rgba(60,30,10,0.05);
+      --shadow-lg: 0 10px 24px rgba(60,30,10,0.12), 0 4px 8px rgba(60,30,10,0.07);
     }
 
     @media (prefers-color-scheme: dark) {
       :root {
-        --color-bg: #0d1117;
-        --color-canvas-subtle: #161b22;
-        --color-canvas-inset: #010409;
-        --color-border-default: #30363d;
-        --color-border-muted: #21262d;
-        --color-fg-default: #e6edf3;
-        --color-fg-muted: #8b949e;
-        --color-fg-subtle: #6e7781;
+        /* ── Anthropic dark — warm ink, not cold GitHub gray ────────────── */
+        --color-bg: #1c1814;
+        --color-canvas-subtle: #241f1a;
+        --color-canvas-inset: #161210;
+        --color-border-default: #3d3530;
+        --color-border-muted: #2e2822;
+        --color-fg-default: #f2ece4;
+        --color-fg-muted: #9e9087;
+        --color-fg-subtle: #7a6e66;
 
-        --color-added-bg: #0f2d1a;
-        --color-added-word-bg: #1a4828;
-        --color-added-gutter: #3fb950;
-        --color-removed-bg: #2d1212;
-        --color-removed-word-bg: #5a1e1e;
-        --color-removed-gutter: #f85149;
+        /* Diff — warm dark variants */
+        --color-added-bg: #0e2415;
+        --color-added-word-bg: #1a4025;
+        --color-added-gutter: #5aad6a;
+        --color-removed-bg: #2b1210;
+        --color-removed-word-bg: #4f1c1a;
+        --color-removed-gutter: #e05a52;
 
-        /* Brand: indigo/violet — brighter for dark */
-        --color-accent-fg: #818cf8;
-        --color-accent-emphasis: #6366f1;
-        --color-accent-subtle: #1e1b4b;
+        /* Brand: Anthropic terracotta — warmer/brighter on dark */
+        --color-accent-fg: #e0835f;
+        --color-accent-emphasis: #cc6a44;
+        --color-accent-subtle: #2d1a12;
 
-        --color-success-fg: #3fb950;
-        --color-success-emphasis: #3fb950;
-        --color-attention-fg: #d29922;
-        --color-danger-fg: #f85149;
+        --color-success-fg: #5cc46e;
+        --color-success-emphasis: #4aad5c;
+        --color-attention-fg: #d4a030;
+        --color-danger-fg: #e85e55;
 
-        --color-severity-error: #f85149;
-        --color-severity-warning: #d29922;
-        --color-severity-suggestion: #818cf8;
-        --color-severity-note: #8b949e;
+        --color-severity-error: #e85e55;
+        --color-severity-warning: #d4a030;
+        --color-severity-suggestion: #e0835f;
+        --color-severity-note: #9e9087;
 
-        --color-outdated-bg: #9a6700;
+        --color-outdated-bg: #8a6500;
 
-        /* Hunk header: dark indigo-tinted */
-        --color-hunk-bg: #1e1b4b;
-        --color-hunk-fg: #a5b4fc;
-        --color-hunk-border: #312e81;
+        /* Hunk header: warm dark terracotta-tinted */
+        --color-hunk-bg: #271a14;
+        --color-hunk-fg: #e0835f;
+        --color-hunk-border: #4a2818;
 
-        --shadow-sm: 0 1px 2px rgba(0,0,0,0.30), 0 1px 3px rgba(0,0,0,0.20);
-        --shadow-md: 0 4px 6px rgba(0,0,0,0.25), 0 2px 4px rgba(0,0,0,0.20);
-        --shadow-lg: 0 10px 24px rgba(0,0,0,0.40), 0 4px 8px rgba(0,0,0,0.25);
+        --shadow-sm: 0 1px 2px rgba(0,0,0,0.35), 0 1px 3px rgba(0,0,0,0.25);
+        --shadow-md: 0 4px 6px rgba(0,0,0,0.30), 0 2px 4px rgba(0,0,0,0.25);
+        --shadow-lg: 0 10px 24px rgba(0,0,0,0.50), 0 4px 8px rgba(0,0,0,0.30);
       }
     }
 
