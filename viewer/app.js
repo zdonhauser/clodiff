@@ -326,19 +326,14 @@ function App() {
   }, [])
 
   const handleAction = useCallback(async (commentId, action) => {
-    const replyRes = await fetch("/reply", {
+    // /action resolves the comment + notifies the monitor via replies.json
+    // without creating a visible reply bubble in the thread
+    const res = await fetch("/action", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ comment_id: commentId, body: action === "fix" ? "Fix It" : "Rejected" }),
+      body: JSON.stringify({ comment_id: commentId, action }),
     })
-    if (!replyRes.ok) return
-
-    const resolveRes = await fetch("/resolve", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ comment_id: commentId }),
-    })
-    if (!resolveRes.ok) return
+    if (!res.ok) return
 
     setComments((prev) => prev.map((c) => c.id === commentId ? { ...c, resolved: true } : c))
 

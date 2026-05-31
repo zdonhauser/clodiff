@@ -32,7 +32,9 @@ const SEVERITY_COLORS = {
  */
 export function SubmitReviewModal({ comments = [], session, onClose, onSubmit }) {
   const existing = session?.reviews?.[session.reviews.length - 1]
-  const [event, setEvent] = useState(existing?.event || "COMMENT")
+  // Can't APPROVE your own PR — GitHub returns 422
+  const isOwnPR = session?.pr_meta?.author === session?.pr_meta?._currentUser
+  const [event, setEvent] = useState(existing?.event === "APPROVE" && isOwnPR ? "COMMENT" : existing?.event || "COMMENT")
   const [body, setBody] = useState(existing?.body || "")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
@@ -58,7 +60,14 @@ export function SubmitReviewModal({ comments = [], session, onClose, onSubmit })
     try {
       await onSubmit?.(event, body)
     } catch (err) {
-      setError(err.message || "Submit failed")
+      // Surface GitHub's error messages clearly (e.g. "can't approve own PR")
+      const msg = err.message || "Submit failed"
+      const friendlyMsg = msg.includes("approve your own") || msg.includes("Can not approve")
+        ? "GitHub doesn't allow approving your own PR. Switch to Comment or Request Changes."
+        : msg.includes("Unprocessable")
+        ? "GitHub rejected the review — check that the commit SHA is current and comments reference valid diff lines."
+        : msg
+      setError(friendlyMsg)
       setSubmitting(false)
     }
   }, [event, body, submitting, onSubmit])
@@ -188,33 +197,39 @@ export function SubmitReviewModal({ comments = [], session, onClose, onSubmit })
               Review decision
             </label>
             <div style=${{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              ${EVENTS.map(({ value, label, description }) => html`
-                <label
-                  key=${value}
-                  style=${{
-                    display: "flex", alignItems: "flex-start", gap: "10px",
-                    padding: "10px 12px",
-                    border: `1px solid ${event === value ? EVENT_COLORS[value] : "var(--color-border-default)"}`,
-                    borderRadius: "var(--radius-sm)",
-                    cursor: "pointer",
-                    background: event === value ? `${EVENT_COLORS[value]}10` : "var(--color-bg)",
-                    transition: "border-color 0.1s, background 0.1s",
-                  }}
-                >
-                  <input
-                    type="radio"
-                    name="review-event"
-                    value=${value}
-                    checked=${event === value}
-                    onChange=${() => setEvent(value)}
-                    style=${{ marginTop: "2px", flexShrink: 0, accentColor: EVENT_COLORS[value] }}
-                  />
-                  <div>
-                    <div style=${{ fontSize: "13px", fontWeight: "600", color: EVENT_COLORS[value] }}>${label}</div>
-                    <div style=${{ fontSize: "12px", color: "var(--color-fg-muted)", marginTop: "2px" }}>${description}</div>
-                  </div>
-                </label>
-              `)}
+              ${EVENTS.map(({ value, label, description }) => {
+                const disabled = value === "APPROVE" && isOwnPR
+                const disabledNote = disabled ? " — can't approve your own PR" : ""
+                return html`
+                  <label
+                    key=${value}
+                    style=${{
+                      display: "flex", alignItems: "flex-start", gap: "10px",
+                      padding: "10px 12px",
+                      border: `1px solid ${event === value ? EVENT_COLORS[value] : "var(--color-border-default)"}`,
+                      borderRadius: "var(--radius-sm)",
+                      cursor: disabled ? "not-allowed" : "pointer",
+                      opacity: disabled ? 0.5 : 1,
+                      background: event === value ? `${EVENT_COLORS[value]}10` : "var(--color-bg)",
+                      transition: "border-color 0.1s, background 0.1s",
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="review-event"
+                      value=${value}
+                      checked=${event === value}
+                      disabled=${disabled}
+                      onChange=${() => !disabled && setEvent(value)}
+                      style=${{ marginTop: "2px", flexShrink: 0, accentColor: EVENT_COLORS[value] }}
+                    />
+                    <div>
+                      <div style=${{ fontSize: "13px", fontWeight: "600", color: EVENT_COLORS[value] }}>${label}</div>
+                      <div style=${{ fontSize: "12px", color: "var(--color-fg-muted)", marginTop: "2px" }}>${description}${disabledNote}</div>
+                    </div>
+                  </label>
+                `
+              })}
             </div>
           </div>
 
