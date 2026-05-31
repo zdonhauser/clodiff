@@ -82,3 +82,9 @@ State is stored in `.review/session.json`. The `.review/` directory is added to 
 bun install
 bun test
 ```
+
+## Recent Improvements
+
+- In-thread reply threading: user and Claude replies appear inline in comment cards
+- Submit Review modal: stage comments, write a review summary, choose APPROVE/REQUEST_CHANGES/COMMENT
+- Inline comment editing: Edit button lets you refine annotations before submitting
