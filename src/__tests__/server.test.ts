@@ -237,6 +237,78 @@ describe("server", () => {
 
   // ── POST /review/body ─────────────────────────────────────────────────────
 
+  // ── POST /action ─────────────────────────────────────────────────────────
+
+  describe("POST /action", () => {
+    async function writeSessionForAction(commentId = "act-c1", threadId?: string) {
+      const reviewDir = join(tmpDir, ".review")
+      await mkdir(reviewDir, { recursive: true })
+      const comment: Record<string, unknown> = {
+        id: commentId, created_at: "2026-01-01T00:00:00Z",
+        source: "claude-code", body: "fix this", path: "f.ts",
+        commit_id: "abc", line: 5, side: "RIGHT",
+      }
+      if (threadId) { comment.github_id = 1; comment.github_thread_id = threadId }
+      const session = {
+        version: 1, repo: tmpDir, base_branch: "main",
+        head_commit: "abc", current_commit: "abc",
+        reviews: [{ id: "r1", commit_id: "abc", event: "COMMENT", comments: [comment], created_at: "2026-01-01T00:00:00Z" }],
+        created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+      }
+      const sessionPath = join(reviewDir, "session.json")
+      await writeFile(sessionPath, JSON.stringify(session))
+      return sessionPath
+    }
+
+    it("resolves comment without creating a visible reply in session", async () => {
+      const sessionPath = await writeSessionForAction("act-c2")
+      await fetch(`http://localhost:${serverResult.port}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comment_id: "act-c2", action: "fix" }),
+      })
+      const updated = JSON.parse(await (await import("fs/promises")).readFile(sessionPath, "utf-8"))
+      const comment = updated.reviews[0].comments[0]
+      expect(comment.resolved).toBe(true)
+      expect(comment.replies).toBeUndefined()
+    })
+
+    it("writes action to replies.json for monitor", async () => {
+      await writeSessionForAction("act-c3")
+      const repliesPath = join(tmpDir, ".review", "replies.json")
+      await (await import("fs/promises")).writeFile(repliesPath, "[]")
+      await fetch(`http://localhost:${serverResult.port}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comment_id: "act-c3", action: "reject" }),
+      })
+      const replies = JSON.parse(await (await import("fs/promises")).readFile(repliesPath, "utf-8"))
+      expect(replies[0].body).toBe("Rejected")
+      expect(replies[0].comment_id).toBe("act-c3")
+    })
+
+    it("stages github_thread_id in pending_resolves", async () => {
+      const sessionPath = await writeSessionForAction("act-c4", "PRRT_action_test")
+      await fetch(`http://localhost:${serverResult.port}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comment_id: "act-c4", action: "fix" }),
+      })
+      const updated = JSON.parse(await (await import("fs/promises")).readFile(sessionPath, "utf-8"))
+      expect(updated.pending_resolves).toContain("PRRT_action_test")
+    })
+
+    it("returns 404 for unknown comment", async () => {
+      await writeSessionForAction()
+      const res = await fetch(`http://localhost:${serverResult.port}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comment_id: "nonexistent", action: "fix" }),
+      })
+      expect(res.status).toBe(404)
+    })
+  })
+
   describe("POST /review/body", () => {
     async function writeSessionForBody() {
       const reviewDir = join(tmpDir, ".review")

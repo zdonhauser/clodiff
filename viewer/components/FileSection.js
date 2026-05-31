@@ -93,6 +93,7 @@ export function FileSection({ file, comments = [], expanded, onToggle, viewMode,
   return html`
     <div
       ref=${containerRef}
+      data-file-section
       data-file-path=${file.path}
       style=${{
         border: "1px solid var(--color-border-default)",

@@ -2,14 +2,18 @@ import { html } from "https://esm.sh/htm/preact"
 import { useState, useCallback, useRef, useEffect } from "https://esm.sh/preact/hooks"
 import { ReplyInput } from "./ReplyInput.js"
 import { marked } from "https://esm.sh/marked@13"
+import DOMPurify from "https://esm.sh/dompurify@3"
 
-// Configure marked: GitHub-flavored, safe rendering
+// GitHub-flavored markdown, XSS-safe via DOMPurify
 marked.setOptions({ gfm: true, breaks: true })
 
 function MarkdownBody({ text, style = {} }) {
   const ref = useRef(null)
   useEffect(() => {
-    if (ref.current) ref.current.innerHTML = marked.parse(text || "")
+    if (ref.current) {
+      const raw = marked.parse(text || "")
+      ref.current.innerHTML = DOMPurify.sanitize(raw, { USE_PROFILES: { html: true } })
+    }
   }, [text])
   return html`<div ref=${ref} class="md-body" style=${style} />`
 }

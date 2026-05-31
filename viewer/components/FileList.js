@@ -60,7 +60,7 @@ export function FileList({
     const scrollEl = findScrollParent(container)
 
     const onScroll = () => {
-      const sections = container.querySelectorAll("[data-file-path]")
+      const sections = container.querySelectorAll("[data-file-section]")
       const scrollRect = scrollEl.getBoundingClientRect()
       const threshold = scrollRect.top
 
@@ -142,7 +142,7 @@ export function FileList({
             <!-- Scroll-to-top hint -->
             <button
               onClick=${() => {
-                const section = containerRef.current?.querySelector(`[data-file-path="${CSS.escape(stickyFile)}"]`)
+                const section = containerRef.current?.querySelector(`[data-file-section][data-file-path="${CSS.escape(stickyFile)}"]`)
                 section?.scrollIntoView({ behavior: "smooth", block: "start" })
               }}
               title="Scroll back to file header"

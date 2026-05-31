@@ -259,6 +259,61 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
             }).catch(() => new Response("Invalid JSON", { status: 400 }))
           }
 
+          // POST /action — record Fix It / Reject decision for the monitor without creating a visible reply
+          // Resolves the comment and writes to replies.json so the monitor can act, but does NOT
+          // append anything to session.json's visible comment thread.
+          if (url.pathname === "/action" && req.method === "POST") {
+            return req.json().then((body: { comment_id: string; action: "fix" | "reject" }) => {
+              try {
+                if (!body.comment_id) return new Response("comment_id required", { status: 400 })
+                const sessionFilePath = join(repoDir, ".review", "session.json")
+                if (!existsSync(sessionFilePath)) return new Response("Not Found", { status: 404 })
+                const raw = readFileSync(sessionFilePath, "utf-8")
+                const session = JSON.parse(raw) as SessionFile
+                let found = false
+                let resolvedComment: import("./session").ReviewComment | undefined
+                for (const review of session.reviews || []) {
+                  for (const comment of review.comments || []) {
+                    if (comment.id === body.comment_id) {
+                      comment.resolved = true
+                      resolvedComment = comment
+                      found = true
+                    }
+                  }
+                }
+                if (!found) return new Response("Comment not found", { status: 404 })
+                if (resolvedComment?.github_thread_id) {
+                  if (!session.pending_resolves) session.pending_resolves = []
+                  if (!session.pending_resolves.includes(resolvedComment.github_thread_id)) {
+                    session.pending_resolves.push(resolvedComment.github_thread_id)
+                  }
+                }
+                session.updated_at = new Date().toISOString()
+                writeFileSync(sessionFilePath, JSON.stringify(session, null, 2))
+                for (const client of wsClients) {
+                  try { client.send(JSON.stringify({ type: "session_update" })) } catch { /* disconnected */ }
+                }
+                // Notify monitor via replies.json without touching session comments
+                const repliesFilePath = join(repoDir, ".review", "replies.json")
+                let replies: ReplyEntry[] = []
+                if (existsSync(repliesFilePath)) {
+                  const r = readFileSync(repliesFilePath, "utf-8")
+                  replies = JSON.parse(r) as ReplyEntry[]
+                }
+                replies.push({
+                  id: crypto.randomUUID(),
+                  comment_id: body.comment_id,
+                  body: body.action === "fix" ? "Fix It" : "Rejected",
+                  created_at: new Date().toISOString(),
+                })
+                writeFileSync(repliesFilePath, JSON.stringify(replies, null, 2))
+                return new Response("OK", { status: 200 })
+              } catch {
+                return new Response("Internal Server Error", { status: 500 })
+              }
+            }).catch(() => new Response("Invalid JSON", { status: 400 }))
+          }
+
           // POST /review/event — set the event (APPROVE / REQUEST_CHANGES / COMMENT) on the current review
           if (url.pathname === "/review/event" && req.method === "POST") {
             return req.json().then((body: { event: string }) => {
