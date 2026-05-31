@@ -1,6 +1,18 @@
 import { html } from "https://esm.sh/htm/preact"
-import { useState, useCallback } from "https://esm.sh/preact/hooks"
+import { useState, useCallback, useRef, useEffect } from "https://esm.sh/preact/hooks"
 import { ReplyInput } from "./ReplyInput.js"
+import { marked } from "https://esm.sh/marked@13"
+
+// Configure marked: GitHub-flavored, safe rendering
+marked.setOptions({ gfm: true, breaks: true })
+
+function MarkdownBody({ text, style = {} }) {
+  const ref = useRef(null)
+  useEffect(() => {
+    if (ref.current) ref.current.innerHTML = marked.parse(text || "")
+  }, [text])
+  return html`<div ref=${ref} class="md-body" style=${style} />`
+}
 
 const SEVERITY_COLORS = {
   error: "var(--color-severity-error)",
@@ -237,14 +249,15 @@ export function CommentCard({ comment, onReply, onResolve, onAction, getNavInfo,
           </div>
         </div>
       ` : html`
-        <div style=${{
-          padding: "12px",
-          fontSize: "var(--font-code-size)",
-          lineHeight: "1.6",
-          color: "var(--color-fg-default)",
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-        }}>${comment.body}</div>
+        <${MarkdownBody}
+          text=${comment.body}
+          style=${{
+            padding: "12px",
+            fontSize: "var(--font-code-size)",
+            lineHeight: "1.6",
+            color: "var(--color-fg-default)",
+          }}
+        />
       `}
 
       <!-- Replies -->
@@ -282,14 +295,15 @@ export function CommentCard({ comment, onReply, onResolve, onAction, getNavInfo,
                     </span>
                   `}
                 </div>
-                <div style=${{
-                  padding: "10px 12px",
-                  fontSize: "var(--font-code-size)",
-                  lineHeight: "1.6",
-                  color: "var(--color-fg-default)",
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
-                }}>${reply.body}</div>
+                <${MarkdownBody}
+                  text=${reply.body}
+                  style=${{
+                    padding: "10px 12px",
+                    fontSize: "var(--font-code-size)",
+                    lineHeight: "1.6",
+                    color: "var(--color-fg-default)",
+                  }}
+                />
                 ${!comment.resolved && html`
                   <div style=${{
                     display: "flex",
@@ -345,12 +359,14 @@ export function CommentCard({ comment, onReply, onResolve, onAction, getNavInfo,
                         }}>${new Date(reply.created_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
                       `}
                     </div>
-                    <div style=${{
-                      fontSize: "var(--font-code-size)",
-                      lineHeight: "1.5",
-                      color: "var(--color-fg-default)",
-                      whiteSpace: "pre-wrap",
-                    }}>${reply.body}</div>
+                    <${MarkdownBody}
+                      text=${reply.body}
+                      style=${{
+                        fontSize: "var(--font-code-size)",
+                        lineHeight: "1.5",
+                        color: "var(--color-fg-default)",
+                      }}
+                    />
                   </div>
                 </div>
               </div>
