@@ -45,6 +45,7 @@ export function FileList({
   onResolve,
   onFileRef,
   onAction,
+  onEdit,
   getNavInfo,
   onNavigate,
 }) {
@@ -182,6 +183,7 @@ export function FileList({
               onResolve=${onResolve}
               onRef=${handleRef}
               onAction=${onAction}
+              onEdit=${onEdit}
               getNavInfo=${getNavInfo}
               onNavigate=${onNavigate}
             />

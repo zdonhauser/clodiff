@@ -1,5 +1,5 @@
 import { html } from "https://esm.sh/htm/preact"
-import { useState } from "https://esm.sh/preact/hooks"
+import { useState, useCallback } from "https://esm.sh/preact/hooks"
 import { ReplyInput } from "./ReplyInput.js"
 
 const SEVERITY_COLORS = {
@@ -98,9 +98,28 @@ function SourceLabel({ source }) {
  *   onAction    — (commentId, action: "fix" | "reject") => void
  *   getNavInfo  — (commentId) => { index, total, prevId, nextId, severity } | null
  *   onNavigate  — (commentId) => void
+ *   onEdit      — (commentId, newBody) => void
  */
-export function CommentCard({ comment, onReply, onResolve, onAction, getNavInfo, onNavigate }) {
+export function CommentCard({ comment, onReply, onResolve, onAction, getNavInfo, onNavigate, onEdit }) {
   const [showReply, setShowReply] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editBody, setEditBody] = useState("")
+
+  const handleEditStart = useCallback(() => {
+    setEditBody(comment.body)
+    setEditing(true)
+  }, [comment.body])
+
+  const handleEditSave = useCallback(async () => {
+    const trimmed = editBody.trim()
+    if (!trimmed) return
+    onEdit?.(comment.id, trimmed)
+    setEditing(false)
+  }, [editBody, comment.id, onEdit])
+
+  const handleEditCancel = useCallback(() => {
+    setEditing(false)
+  }, [])
 
   const navInfo = !comment.resolved ? getNavInfo?.(comment.id) : null
   const navColor = navInfo ? (SEVERITY_COLORS[navInfo.severity] || "var(--color-fg-muted)") : null
@@ -184,15 +203,49 @@ export function CommentCard({ comment, onReply, onResolve, onAction, getNavInfo,
         </div>
       `}
 
-      <!-- Body -->
-      <div style=${{
-        padding: "12px",
-        fontSize: "var(--font-code-size)",
-        lineHeight: "1.6",
-        color: "var(--color-fg-default)",
-        whiteSpace: "pre-wrap",
-        wordBreak: "break-word",
-      }}>${comment.body}</div>
+      <!-- Body (or inline editor) -->
+      ${editing ? html`
+        <div style=${{ padding: "10px 12px" }}>
+          <textarea
+            value=${editBody}
+            onInput=${(e) => setEditBody(e.target.value)}
+            onKeyDown=${(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); handleEditSave() }
+              if (e.key === "Escape") handleEditCancel()
+            }}
+            autoFocus
+            style=${{
+              width: "100%",
+              minHeight: "80px",
+              padding: "8px",
+              background: "var(--color-bg)",
+              border: "1px solid var(--color-accent-emphasis)",
+              borderRadius: "var(--radius-sm)",
+              fontFamily: "var(--font-ui)",
+              fontSize: "var(--font-code-size)",
+              color: "var(--color-fg-default)",
+              resize: "vertical",
+              outline: "none",
+              lineHeight: "1.5",
+              boxSizing: "border-box",
+            }}
+          />
+          <div style=${{ display: "flex", gap: "6px", marginTop: "6px", justifyContent: "flex-end" }}>
+            <span style=${{ fontSize: "11px", color: "var(--color-fg-subtle)", alignSelf: "center", marginRight: "auto" }}>⌘↵ save · Esc cancel</span>
+            <button onClick=${handleEditCancel} style=${{ padding: "3px 10px", background: "transparent", border: "1px solid var(--color-border-default)", borderRadius: "var(--radius-sm)", color: "var(--color-fg-muted)", fontSize: "12px", cursor: "pointer" }}>Cancel</button>
+            <button onClick=${handleEditSave} style=${{ padding: "3px 10px", background: "var(--color-accent-emphasis)", border: "none", borderRadius: "var(--radius-sm)", color: "#fff", fontSize: "12px", cursor: "pointer", fontWeight: "500" }}>Save</button>
+          </div>
+        </div>
+      ` : html`
+        <div style=${{
+          padding: "12px",
+          fontSize: "var(--font-code-size)",
+          lineHeight: "1.6",
+          color: "var(--color-fg-default)",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+        }}>${comment.body}</div>
+      `}
 
       <!-- Replies -->
       ${comment.replies && comment.replies.length > 0 && html`
@@ -337,6 +390,19 @@ export function CommentCard({ comment, onReply, onResolve, onAction, getNavInfo,
               cursor: "pointer",
             }}
           >Reply</button>
+          <button
+            onClick=${handleEditStart}
+            title="Edit comment"
+            style=${{
+              padding: "3px 10px",
+              background: "transparent",
+              border: "1px solid var(--color-border-default)",
+              borderRadius: "var(--radius-sm)",
+              color: "var(--color-fg-muted)",
+              fontSize: "12px",
+              cursor: "pointer",
+            }}
+          >Edit</button>
           <button
             onClick=${handleResolve}
             style=${{

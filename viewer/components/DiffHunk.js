@@ -14,7 +14,7 @@ import { CommentThread } from "./CommentThread.js"
  *   onResolve — (commentId) => void
  *   onAction  — (commentId, action) => void
  */
-export function DiffHunk({ hunk, comments = [], viewMode, path, onReply, onResolve, onAction, getNavInfo, onNavigate }) {
+export function DiffHunk({ hunk, comments = [], viewMode, path, onReply, onResolve, onAction, onEdit, getNavInfo, onNavigate }) {
   if (!hunk) return null
 
   const hunkHeaderStyle = {
@@ -56,6 +56,7 @@ export function DiffHunk({ hunk, comments = [], viewMode, path, onReply, onResol
                   onReply=${onReply}
                   onResolve=${onResolve}
                   onAction=${onAction}
+                  onEdit=${onEdit}
                   getNavInfo=${getNavInfo}
                   onNavigate=${onNavigate}
                 />

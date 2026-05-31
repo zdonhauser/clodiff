@@ -1,6 +1,7 @@
 import { html } from "https://esm.sh/htm/preact"
 import { useState, useCallback } from "https://esm.sh/preact/hooks"
 import { RefPicker } from "./RefPicker.js"
+import { SubmitReviewModal } from "./SubmitReviewModal.js"
 
 /**
  * Header component.
@@ -12,12 +13,13 @@ import { RefPicker } from "./RefPicker.js"
  *   viewMode   — "unified" | "side-by-side"
  *   onViewMode — (mode) => void
  */
-export function Header({ session, fileCount, wsStatus, viewMode, onViewMode, sidebarOpen, onToggleSidebar, isMobile }) {
+export function Header({ session, comments = [], fileCount, wsStatus, viewMode, onViewMode, sidebarOpen, onToggleSidebar, isMobile }) {
   const [rediffStatus, setRediffStatus] = useState(null)
   const [fromRef, setFromRef] = useState(null)
   const [toRef, setToRef] = useState(null)
   const [reviewStatus, setReviewStatus] = useState(null) // null | "approving" | "approved" | "requesting" | "changes_requested" | "error"
   const [pushStatus, setPushStatus] = useState(null)     // null | "pushing" | "done" | "error"
+  const [showSubmitModal, setShowSubmitModal] = useState(false)
 
   const baseBranch = session?.base_branch || "main"
   const currentBranch = session?.repo
@@ -275,39 +277,9 @@ export function Header({ session, fileCount, wsStatus, viewMode, onViewMode, sid
 
         <div style=${{ flex: 1 }} />
 
-        <!-- Approve -->
+        <!-- Submit Review (opens modal) -->
         <button
-          onClick=${() => handleReviewEvent("APPROVE")}
-          disabled=${reviewStatus === "approving"}
-          style=${{
-            ...btnBase,
-            background: reviewStatus === "approved" ? "#2da44e" : "var(--color-bg)",
-            color: reviewStatus === "approved" ? "#ffffff" : "var(--color-success-fg)",
-            borderColor: reviewStatus === "approved" ? "#2da44e" : "var(--color-border-default)",
-          }}
-        >
-          ${reviewStatus === "approving" ? "Approving…" : reviewStatus === "approved" ? "✓ Approved" : "Approve"}
-        </button>
-
-        <!-- Request Changes — hidden on mobile to save space -->
-        ${!isMobile && html`
-          <button
-            onClick=${() => handleReviewEvent("REQUEST_CHANGES")}
-            disabled=${reviewStatus === "requesting"}
-            style=${{
-              ...btnBase,
-              background: reviewStatus === "changes_requested" ? "var(--color-danger-fg)" : "var(--color-bg)",
-              color: reviewStatus === "changes_requested" ? "#ffffff" : "var(--color-danger-fg)",
-              borderColor: reviewStatus === "changes_requested" ? "var(--color-danger-fg)" : "var(--color-border-default)",
-            }}
-          >
-            ${reviewStatus === "requesting" ? "Requesting…" : reviewStatus === "changes_requested" ? "✓ Changes Requested" : "Request Changes"}
-          </button>
-        `}
-
-        <!-- Push to GitHub -->
-        <button
-          onClick=${handlePush}
+          onClick=${() => setShowSubmitModal(true)}
           disabled=${pushStatus === "pushing"}
           style=${{
             ...btnBase,
@@ -316,9 +288,53 @@ export function Header({ session, fileCount, wsStatus, viewMode, onViewMode, sid
             border: "none",
           }}
         >
-          ${pushStatus === "pushing" ? "Pushing…" : pushStatus === "done" ? "✓ Pushed" : pushStatus === "error" ? "Failed" : isMobile ? "Push" : "Push to GitHub"}
+          ${pushStatus === "pushing" ? "Submitting…"
+            : pushStatus === "done" ? "✓ Submitted"
+            : pushStatus === "error" ? "Failed"
+            : "Submit Review"}
         </button>
       </div>
     </header>
+
+    <!-- Submit Review Modal -->
+    ${showSubmitModal && html`
+      <${SubmitReviewModal}
+        comments=${comments}
+        session=${session}
+        onClose=${() => setShowSubmitModal(false)}
+        onSubmit=${async (event, body) => {
+          setPushStatus("pushing")
+          try {
+            // 1. Set event
+            const evRes = await fetch("/review/event", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ event }),
+            })
+            if (!evRes.ok) throw new Error(await evRes.text())
+
+            // 2. Set review body (optional)
+            const bodyRes = await fetch("/review/body", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ body }),
+            })
+            if (!bodyRes.ok) throw new Error(await bodyRes.text())
+
+            // 3. Push to GitHub
+            const pushRes = await fetch("/push", { method: "POST" })
+            if (!pushRes.ok) throw new Error(await pushRes.text())
+
+            setPushStatus("done")
+            setShowSubmitModal(false)
+            setTimeout(() => setPushStatus(null), 4000)
+          } catch (err) {
+            setPushStatus("error")
+            setTimeout(() => setPushStatus(null), 5000)
+            throw err
+          }
+        }}
+      />
+    `}
   `
 }

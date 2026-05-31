@@ -159,6 +159,66 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
             }).catch(() => new Response("Invalid JSON", { status: 400 }))
           }
 
+          // POST /review/body — set the review body text (summary comment)
+          if (url.pathname === "/review/body" && req.method === "POST") {
+            return req.json().then((body: { body: string }) => {
+              try {
+                const sessionFilePath = join(repoDir, ".review", "session.json")
+                if (!existsSync(sessionFilePath)) return new Response("Not Found", { status: 404 })
+                const raw = readFileSync(sessionFilePath, "utf-8")
+                const session = JSON.parse(raw) as SessionFile
+                if (!session.reviews || session.reviews.length === 0) {
+                  return new Response("No reviews in session", { status: 400 })
+                }
+                const review = session.reviews[session.reviews.length - 1]
+                if (body.body && body.body.trim()) {
+                  review.body = body.body
+                } else {
+                  delete review.body
+                }
+                session.updated_at = new Date().toISOString()
+                writeFileSync(sessionFilePath, JSON.stringify(session, null, 2))
+                for (const client of wsClients) {
+                  try { client.send(JSON.stringify({ type: "session_update" })) } catch { /* disconnected */ }
+                }
+                return new Response("OK", { status: 200 })
+              } catch {
+                return new Response("Internal Server Error", { status: 500 })
+              }
+            }).catch(() => new Response("Invalid JSON", { status: 400 }))
+          }
+
+          // POST /edit-comment — update a comment's body in session.json
+          if (url.pathname === "/edit-comment" && req.method === "POST") {
+            return req.json().then((body: { comment_id: string; body: string }) => {
+              try {
+                if (!body.comment_id) return new Response("comment_id required", { status: 400 })
+                const sessionFilePath = join(repoDir, ".review", "session.json")
+                if (!existsSync(sessionFilePath)) return new Response("Not Found", { status: 404 })
+                const raw = readFileSync(sessionFilePath, "utf-8")
+                const session = JSON.parse(raw) as SessionFile
+                let found = false
+                for (const review of session.reviews || []) {
+                  for (const comment of review.comments || []) {
+                    if (comment.id === body.comment_id) {
+                      comment.body = body.body
+                      found = true
+                    }
+                  }
+                }
+                if (!found) return new Response("Comment not found", { status: 404 })
+                session.updated_at = new Date().toISOString()
+                writeFileSync(sessionFilePath, JSON.stringify(session, null, 2))
+                for (const client of wsClients) {
+                  try { client.send(JSON.stringify({ type: "session_update" })) } catch { /* disconnected */ }
+                }
+                return new Response("OK", { status: 200 })
+              } catch {
+                return new Response("Internal Server Error", { status: 500 })
+              }
+            }).catch(() => new Response("Invalid JSON", { status: 400 }))
+          }
+
           // POST /resolve — mark a comment as resolved in session.json
           if (url.pathname === "/resolve" && req.method === "POST") {
             return req.json().then((body: { comment_id: string }) => {

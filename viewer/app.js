@@ -354,6 +354,18 @@ function App() {
     // Could track open reply boxes globally if needed
   }, [])
 
+  // Edit a comment body: optimistic update + POST
+  const handleEdit = useCallback(async (commentId, newBody) => {
+    setComments((prev) =>
+      prev.map((c) => (c.id === commentId ? { ...c, body: newBody } : c))
+    )
+    fetch("/edit-comment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ comment_id: commentId, body: newBody }),
+    }).catch(() => {})
+  }, [])
+
   const fileCount = diff.length
   // On mobile always use unified — side-by-side is unusable on narrow screens
   const effectiveViewMode = isMobile ? "unified" : viewMode
@@ -362,6 +374,7 @@ function App() {
     <div style=${{ height: "100%", background: "var(--color-bg)", display: "flex", flexDirection: "column" }}>
       <${Header}
         session=${session}
+        comments=${comments}
         fileCount=${fileCount}
         wsStatus=${wsStatus}
         viewMode=${effectiveViewMode}
@@ -405,6 +418,7 @@ function App() {
                 onReply=${handleReply}
                 onResolve=${handleResolve}
                 onAction=${handleAction}
+                onEdit=${handleEdit}
                 onFileRef=${handleFileRef}
                 getNavInfo=${getNavInfo}
                 onNavigate=${handleNavigate}

@@ -30,7 +30,7 @@ const STATUS_COLORS = {
  *   onRef       — (el: HTMLElement | null) => void
  *   onAction    — (commentId, action) => void
  */
-export function FileSection({ file, comments = [], expanded, onToggle, viewMode, onReply, onResolve, onRef, onAction, getNavInfo, onNavigate }) {
+export function FileSection({ file, comments = [], expanded, onToggle, viewMode, onReply, onResolve, onRef, onAction, onEdit, getNavInfo, onNavigate }) {
   const containerRef = useRef(null)
 
   useEffect(() => {
@@ -196,6 +196,7 @@ export function FileSection({ file, comments = [], expanded, onToggle, viewMode,
               onReply=${onReply}
               onResolve=${onResolve}
               onAction=${onAction}
+              onEdit=${onEdit}
               getNavInfo=${getNavInfo}
               onNavigate=${onNavigate}
             />
