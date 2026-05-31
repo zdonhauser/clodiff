@@ -120,6 +120,11 @@
       font-family: var(--font-ui);
       font-size: 14px;
       line-height: 1.5;
+      /* Prevent iOS/Android from auto-scaling small fonts up to "readable" size.
+         Without this, --font-code-size: 10px gets inflated to ~16px on mobile
+         while UI text at 13px stays put — making code look huge on small setting. */
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
     }
 
     #app {
@@ -142,6 +147,13 @@
     [data-text-size="sm"] { --font-code-size: 10px; }
     [data-text-size="md"] { --font-code-size: 12px; }
     [data-text-size="lg"] { --font-code-size: 14px; }
+    /* Mobile: floor at 11px so small stays readable and doesn't trigger
+       browser upscaling that would make it appear larger than UI text */
+    @media (max-width: 768px) {
+      [data-text-size="sm"] { --font-code-size: 11px; }
+      [data-text-size="md"] { --font-code-size: 12px; }
+      [data-text-size="lg"] { --font-code-size: 14px; }
+    }
 
     /* Button base — all buttons inherit font, transition */
     button {
