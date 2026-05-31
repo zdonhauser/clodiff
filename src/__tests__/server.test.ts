@@ -169,6 +169,72 @@ describe("server", () => {
     })
   })
 
+  // ── POST /resolve (staged GitHub thread resolves) ────────────────────────
+
+  describe("POST /resolve with github_thread_id stages the resolve", () => {
+    it("adds github_thread_id to pending_resolves", async () => {
+      const reviewDir = join(tmpDir, ".review")
+      await mkdir(reviewDir, { recursive: true })
+      const session = {
+        version: 1, repo: tmpDir, base_branch: "main",
+        head_commit: "abc", current_commit: "abc",
+        reviews: [{
+          id: "r1", commit_id: "abc", event: "COMMENT",
+          comments: [{
+            id: "c-gh-1", created_at: "2026-01-01T00:00:00Z",
+            source: "user", body: "original", path: "f.ts", commit_id: "abc",
+            line: 5, side: "RIGHT",
+            github_id: 123, github_thread_id: "PRRT_abc",
+          }],
+          created_at: "2026-01-01T00:00:00Z",
+        }],
+        created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+      }
+      const sessionPath = join(reviewDir, "session.json")
+      await writeFile(sessionPath, JSON.stringify(session))
+
+      const res = await fetch(`http://localhost:${serverResult.port}/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comment_id: "c-gh-1" }),
+      })
+      expect(res.status).toBe(200)
+
+      const updated = JSON.parse(await (await import("fs/promises")).readFile(sessionPath, "utf-8"))
+      expect(updated.pending_resolves).toContain("PRRT_abc")
+    })
+
+    it("does not add to pending_resolves for comments without github_thread_id", async () => {
+      const reviewDir = join(tmpDir, ".review")
+      await mkdir(reviewDir, { recursive: true })
+      const session = {
+        version: 1, repo: tmpDir, base_branch: "main",
+        head_commit: "abc", current_commit: "abc",
+        reviews: [{
+          id: "r1", commit_id: "abc", event: "COMMENT",
+          comments: [{
+            id: "c-local", created_at: "2026-01-01T00:00:00Z",
+            source: "claude-code", body: "local only", path: "f.ts",
+            commit_id: "abc", line: 5, side: "RIGHT",
+          }],
+          created_at: "2026-01-01T00:00:00Z",
+        }],
+        created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+      }
+      const sessionPath = join(reviewDir, "session.json")
+      await writeFile(sessionPath, JSON.stringify(session))
+
+      await fetch(`http://localhost:${serverResult.port}/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comment_id: "c-local" }),
+      })
+
+      const updated = JSON.parse(await (await import("fs/promises")).readFile(sessionPath, "utf-8"))
+      expect(updated.pending_resolves ?? []).toHaveLength(0)
+    })
+  })
+
   // ── POST /review/body ─────────────────────────────────────────────────────
 
   describe("POST /review/body", () => {

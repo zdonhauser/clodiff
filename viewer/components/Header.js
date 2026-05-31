@@ -146,6 +146,57 @@ export function Header({ session, comments = [], fileCount, wsStatus, viewMode, 
       borderBottom: "1px solid var(--color-border-default)",
       boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
     }}>
+      <!-- PR meta bar — shown when reviewing a PR -->
+      ${session?.pr_meta && html`
+        <div style=${{
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          padding: "5px 12px",
+          background: "var(--color-canvas-default, var(--color-bg))",
+          borderBottom: "1px solid var(--color-border-muted)",
+          fontSize: "12px",
+          flexWrap: "nowrap",
+          overflow: "hidden",
+        }}>
+          <!-- PR number -->
+          <span style=${{ color: "var(--color-fg-muted)", flexShrink: 0, fontWeight: "500" }}>
+            PR #${session.pr_meta.number}
+          </span>
+          <span style=${{ color: "var(--color-border-default)" }}>·</span>
+          <!-- Title -->
+          <span style=${{
+            color: "var(--color-fg-default)",
+            fontWeight: "600",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            flex: 1,
+            minWidth: 0,
+          }}>${session.pr_meta.title}</span>
+          <!-- Author -->
+          <span style=${{ color: "var(--color-fg-muted)", flexShrink: 0, whiteSpace: "nowrap" }}>
+            @${session.pr_meta.author}
+          </span>
+          <!-- CI status -->
+          ${session.pr_meta.checks_status && session.pr_meta.checks_status !== "neutral" && html`
+            <span style=${{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: "4px", whiteSpace: "nowrap" }}>
+              <span style=${{
+                width: "7px", height: "7px", borderRadius: "50%", flexShrink: 0,
+                background: session.pr_meta.checks_status === "success" ? "#1a7f37"
+                  : session.pr_meta.checks_status === "failure" ? "#cf222e"
+                  : "#9a6700",
+              }} />
+              <span style=${{ color: "var(--color-fg-muted)" }}>
+                ${session.pr_meta.checks_status === "success" ? "CI passing"
+                  : session.pr_meta.checks_status === "failure" ? "CI failing"
+                  : "CI pending"}
+              </span>
+            </span>
+          `}
+        </div>
+      `}
+
       <!-- Top row -->
       <div style=${{
         display: "flex",

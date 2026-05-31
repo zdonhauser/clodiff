@@ -13,6 +13,10 @@ export interface ReviewComment {
   original_line?: number
   is_outdated?: boolean
 
+  // GitHub import fields (set when comment was fetched from GitHub)
+  github_id?: number       // REST API databaseId — used to deduplicate imports
+  github_thread_id?: string // GraphQL PRRT_xxx node ID — used for staged resolves
+
   // GitHub API fields
   body: string
   path: string
@@ -33,6 +37,14 @@ export interface Review {
   created_at: string
 }
 
+export interface PRMeta {
+  number: number
+  title: string
+  author: string
+  body?: string
+  checks_status?: "success" | "failure" | "pending" | "neutral"
+}
+
 export interface SessionFile {
   version: 1
   repo: string
@@ -40,6 +52,8 @@ export interface SessionFile {
   head_commit: string
   current_commit: string
   pr_number?: number
+  pr_meta?: PRMeta
+  pending_resolves?: string[] // github_thread_ids to resolve on next submit
   reviews: Review[]
   created_at: string
   updated_at: string

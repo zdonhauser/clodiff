@@ -6,6 +6,7 @@ import { loadSession, saveSession } from "./session"
 import type { SessionFile, Review } from "./session"
 import { reanchorComments } from "./anchoring"
 import { startServer } from "./server"
+import { fetchPRInfo, fetchPRThreads } from "./github"
 
 export interface CliArgs {
   base: string
@@ -145,6 +146,19 @@ export async function main(): Promise<void> {
   let currentFrom: string | null = null
   let currentTo: string | null = null
 
+  // Auto-detect PR from current branch when no diff source is specified
+  let prInfo = null
+  if (!args.stdin && !args.patch && !args.from && !args.to && !args.base) {
+    prInfo = await fetchPRInfo(repoDir, args.pr)
+    if (prInfo) {
+      console.log(`clodiff: PR #${prInfo.number} detected — ${prInfo.title}`)
+      // Fetch the branch from origin so we can diff against it
+      spawnSync("git", ["fetch", "origin", prInfo.headRefName], { cwd: repoDir })
+      currentFrom = prInfo.baseRefName
+      currentTo = `origin/${prInfo.headRefName}`
+    }
+  }
+
   if (args.stdin) {
     diffText = await readStdin()
   } else if (args.patch) {
@@ -153,6 +167,9 @@ export async function main(): Promise<void> {
     currentFrom = args.from
     currentTo = args.to
     diffText = runGitDiff(repoDir, args.from, args.to)
+  } else if (currentFrom && currentTo) {
+    // Set by PR auto-detect above
+    diffText = runGitDiff(repoDir, currentFrom, currentTo)
   } else if (args.base) {
     currentFrom = args.base
     currentTo = "HEAD"
@@ -195,16 +212,35 @@ export async function main(): Promise<void> {
       comments: [],
       created_at: now,
     }
+    const prNumber = prInfo?.number ?? args.pr
+    const prMeta = prInfo ? {
+      number: prInfo.number,
+      title: prInfo.title,
+      author: prInfo.author,
+      body: prInfo.body,
+      checks_status: prInfo.checks_status,
+    } : undefined
+
     session = {
       version: 1,
       repo: repoDir,
-      base_branch: args.base,
+      base_branch: args.base || prInfo?.baseRefName || "",
       head_commit: headCommit,
       current_commit: headCommit,
-      ...(args.pr !== undefined ? { pr_number: args.pr } : {}),
+      ...(prNumber !== undefined ? { pr_number: prNumber } : {}),
+      ...(prMeta ? { pr_meta: prMeta } : {}),
       reviews: [review],
       created_at: now,
       updated_at: now,
+    }
+
+    // Import existing GitHub PR review threads on fresh session
+    if (prNumber && headCommit) {
+      const existingThreads = await fetchPRThreads(repoDir, prNumber, headCommit)
+      if (existingThreads.length > 0) {
+        console.log(`clodiff: importing ${existingThreads.length} existing review thread(s)`)
+        review.comments.push(...existingThreads)
+      }
     }
   }
 
