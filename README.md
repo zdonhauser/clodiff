@@ -2,6 +2,8 @@
 
 A local code review viewer for Claude Code. Run it in any repo and Claude can navigate the diff, highlight lines, leave inline annotations, and submit full GitHub PR reviews — all from a shared browser window.
 
+![clodiff reviewing a pull request — PR meta bar, file tree, and inline Claude annotations](docs/screenshots/pr-review.png)
+
 ---
 
 ## Installation
@@ -74,6 +76,8 @@ Annotations appear as comment cards alongside the relevant diff lines with:
 - **Edit before submit** — click Edit on any annotation to refine the wording
   before it goes to GitHub
 
+![An inline annotation card with severity badge, rendered markdown, and Reply / Edit / Resolve / Fix It / Reject actions](docs/screenshots/annotation-card.png)
+
 ### Comment navigation
 
 A floating pill in the bottom-right corner shows the current comment's severity
@@ -93,6 +97,8 @@ The **Submit Review** button opens a modal where you:
 
 GitHub's restriction that you cannot approve your own PR is detected and
 the Approve option is disabled with an explanation.
+
+![The Submit Review modal showing staged comment counts by severity, a review summary field, and the Comment / Approve / Request Changes decision](docs/screenshots/submit-review.png)
 
 ### Sticky file headers
 
