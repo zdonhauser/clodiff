@@ -15,6 +15,7 @@ export interface CliArgs {
   patch?: string
   from?: string
   to?: string
+  pr?: number
 }
 
 function nextValue(argv: string[], i: number, flag: string): string {
@@ -55,6 +56,11 @@ export function parseArgs(argv: string[]): CliArgs {
     } else if (arg === "--to") {
       args.to = nextValue(argv, i, "--to")
       i++
+    } else if (arg === "--pr") {
+      const n = parseInt(nextValue(argv, i, "--pr"), 10)
+      if (isNaN(n)) throw new Error("--pr must be a valid number")
+      args.pr = n
+      i++
     } else if (arg.startsWith("--")) {
       throw new Error("Unknown flag: " + arg)
     }
@@ -78,12 +84,16 @@ async function readStdin(): Promise<string> {
 }
 
 function getHeadCommit(repoDir: string): string {
+  return resolveRef(repoDir, "HEAD")
+}
+
+function resolveRef(repoDir: string, ref: string): string {
   try {
-    const result = spawnSync("git", ["rev-parse", "HEAD"], {
+    const result = spawnSync("git", ["rev-parse", ref], {
       cwd: repoDir,
       encoding: "utf-8",
     })
-    return result.stdout.trim()
+    return result.stdout.trim() || "unknown"
   } catch {
     return "unknown"
   }
@@ -161,7 +171,11 @@ export async function main(): Promise<void> {
 
   // --- Load or create session ---
   const existingSession = await loadSession(repoDir)
-  const headCommit = getHeadCommit(repoDir)
+  // When diffing to a specific ref, use that ref's commit as the review's commit_id
+  // so GitHub PR reviews reference the correct commit on the feature branch.
+  const headCommit = currentTo
+    ? resolveRef(repoDir, currentTo)
+    : getHeadCommit(repoDir)
 
   let session: SessionFile
 
@@ -187,6 +201,7 @@ export async function main(): Promise<void> {
       base_branch: args.base,
       head_commit: headCommit,
       current_commit: headCommit,
+      ...(args.pr !== undefined ? { pr_number: args.pr } : {}),
       reviews: [review],
       created_at: now,
       updated_at: now,

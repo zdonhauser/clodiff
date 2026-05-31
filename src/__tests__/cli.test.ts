@@ -105,4 +105,22 @@ describe("CLI args", () => {
   it("--port abc throws 'must be a valid number'", () => {
     expect(() => parseArgs(["--port", "abc"])).toThrow("--port must be a valid number")
   })
+
+  it("accepts --pr flag as a number", () => {
+    const args = parseArgs(["--pr", "42"])
+    expect(args.pr).toBe(42)
+  })
+
+  it("defaults pr to undefined", () => {
+    const args = parseArgs([])
+    expect(args.pr).toBeUndefined()
+  })
+
+  it("--pr without value throws", () => {
+    expect(() => parseArgs(["--pr"])).toThrow("--pr requires a value")
+  })
+
+  it("--pr abc throws 'must be a valid number'", () => {
+    expect(() => parseArgs(["--pr", "abc"])).toThrow("--pr must be a valid number")
+  })
 })
