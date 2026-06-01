@@ -3,12 +3,12 @@ import { readFile } from "fs/promises"
 import { join } from "path"
 import { spawnSync } from "child_process"
 import { fileURLToPath } from "url"
-import { parseDiff } from "./diff-parser"
-import { loadSession, saveSession } from "./session"
-import type { SessionFile, Review } from "./session"
-import { reanchorComments } from "./anchoring"
-import { startServer } from "./server"
-import { fetchPRInfo, fetchPRThreads, fetchPRConversation } from "./github"
+import { parseDiff } from "./diff-parser.ts"
+import { loadSession, saveSession } from "./session.ts"
+import type { SessionFile, Review } from "./session.ts"
+import { reanchorComments } from "./anchoring.ts"
+import { startServer } from "./server.ts"
+import { fetchPRInfo, fetchPRThreads, fetchPRConversation } from "./github.ts"
 
 // Sentinel "to" endpoint meaning the working tree (uncommitted changes), as
 // opposed to a committed ref. `git diff <from>` (no second arg) compares the

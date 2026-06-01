@@ -1,5 +1,5 @@
-import type { DiffFile, DiffLine } from "./diff-parser"
-import type { ReviewComment } from "./session"
+import type { DiffFile, DiffLine } from "./diff-parser.ts"
+import type { ReviewComment } from "./session.ts"
 
 // Re-anchor comments based on current diff output.
 // For each comment, look up line_content in the new diff for the same path.

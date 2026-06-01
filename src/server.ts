@@ -6,8 +6,8 @@ import { readFile } from "fs/promises"
 import { createServer } from "http"
 import type { IncomingMessage, ServerResponse, Server } from "http"
 import { WebSocketServer, type WebSocket } from "ws"
-import type { SessionFile, ReplyEntry } from "./session"
-import { reviewDir } from "./session"
+import type { SessionFile, ReplyEntry } from "./session.ts"
+import { reviewDir } from "./session.ts"
 
 // ── Node bridge: translate between Node's http req/res and the web-standard
 // Request/Response the route handlers are written against. ───────────────────
@@ -288,7 +288,7 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
                 const raw = readFileSync(sessionPath, "utf-8")
                 const session = JSON.parse(raw) as SessionFile
                 let found = false
-                let resolvedComment: import("./session").ReviewComment | undefined
+                let resolvedComment: import("./session.ts").ReviewComment | undefined
                 for (const review of session.reviews || []) {
                   for (const comment of review.comments || []) {
                     if (comment.id === body.comment_id) {
@@ -330,7 +330,7 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
                 const raw = readFileSync(sessionFilePath, "utf-8")
                 const session = JSON.parse(raw) as SessionFile
                 let found = false
-                let resolvedComment: import("./session").ReviewComment | undefined
+                let resolvedComment: import("./session.ts").ReviewComment | undefined
                 for (const review of session.reviews || []) {
                   for (const comment of review.comments || []) {
                     if (comment.id === body.comment_id) {
@@ -406,7 +406,7 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
                 if (!existsSync(sessionPath)) return new Response("No session found", { status: 404 })
                 const raw = readFileSync(sessionPath, "utf-8")
                 const session = JSON.parse(raw) as SessionFile
-                const { checkAuth, findOpenPR, buildReviewPayload, pushReview } = await import("./github")
+                const { checkAuth, findOpenPR, buildReviewPayload, pushReview } = await import("./github.ts")
                 if (!await checkAuth()) return new Response("Not authenticated with GitHub", { status: 401 })
                 const prNumber = session.pr_number ?? await findOpenPR(repoDir)
                 if (!prNumber) return new Response("No open PR found", { status: 404 })
@@ -416,7 +416,7 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
                 const review = session.reviews[session.reviews.length - 1]
                 await pushReview(repoDir, prNumber, buildReviewPayload(review))
                 // Flush staged GitHub side-effects (best-effort, don't fail the push)
-                const { resolveThreads, postThreadReplies } = await import("./github")
+                const { resolveThreads, postThreadReplies } = await import("./github.ts")
                 let mutated = false
                 const pendingResolves = session.pending_resolves ?? []
                 if (pendingResolves.length > 0) {
@@ -450,7 +450,7 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
                 const sessionPath = join(reviewDir(repoDir), "session.json")
                 if (!existsSync(sessionPath)) return new Response("No session found", { status: 404 })
                 const session = JSON.parse(readFileSync(sessionPath, "utf-8")) as SessionFile
-                const { checkAuth, postThreadReplies, resolveThreads, requestReReview } = await import("./github")
+                const { checkAuth, postThreadReplies, resolveThreads, requestReReview } = await import("./github.ts")
                 if (!await checkAuth()) return new Response("Not authenticated with GitHub", { status: 401 })
                 const prNumber = session.pr_number
                 if (!prNumber) return new Response("No open PR found", { status: 404 })

@@ -1,4 +1,4 @@
-import type { Review, ReviewComment, PRMeta } from "./session"
+import type { Review, ReviewComment, PRMeta } from "./session.ts"
 import { spawn as cpSpawn } from "child_process"
 
 // Minimal spawn interface the GitHub helpers rely on (a subset of what Bun.spawn
@@ -359,7 +359,7 @@ export async function fetchPRConversation(
   repoDir: string,
   prNumber: number,
   _spawn: SpawnFn = nodeSpawn,
-): Promise<import("./session").ConversationComment[]> {
+): Promise<import("./session.ts").ConversationComment[]> {
   let owner: string, name: string
   try {
     const r = await getRepoOwnerName(repoDir, _spawn)
@@ -369,7 +369,7 @@ export async function fetchPRConversation(
     return []
   }
 
-  const out: import("./session").ConversationComment[] = []
+  const out: import("./session.ts").ConversationComment[] = []
 
   // Issue comments = the top-level PR conversation (all pages)
   const issueComments = await ghPaginated<{
@@ -393,7 +393,7 @@ export async function fetchPRConversation(
   }>(repoDir, `/repos/${owner}/${name}/pulls/${prNumber}/reviews?per_page=100`, _spawn)
   for (const r of reviews) {
     if (!r.body?.trim()) continue
-    const stateMap: Record<string, import("./session").ConversationComment["state"]> = {
+    const stateMap: Record<string, import("./session.ts").ConversationComment["state"]> = {
       APPROVED: "APPROVED", CHANGES_REQUESTED: "CHANGES_REQUESTED",
       COMMENTED: "COMMENTED", DISMISSED: "DISMISSED",
     }
