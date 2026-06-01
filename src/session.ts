@@ -1,5 +1,8 @@
 import { readFile, writeFile, mkdir, access, unlink } from "fs/promises"
 import { join } from "path"
+import { spawnSync } from "child_process"
+import { tmpdir } from "os"
+import { createHash } from "crypto"
 
 export interface ReviewComment {
   // Local only
@@ -86,8 +89,27 @@ export interface ReplyEntry {
   created_at: string
 }
 
-function reviewDir(repoDir: string): string {
-  return join(repoDir, ".review")
+// clodiff stores its session under the repo's git dir (`<git-dir>/clodiff/`)
+// rather than a tracked `.review/` folder: git never tracks anything inside the
+// git dir, so it's invisible to status/diff and needs no .gitignore entry. Using
+// `--absolute-git-dir` (not `--git-common-dir`) gives the PER-WORKTREE dir, so
+// each worktree gets its own isolated session. Falls back to a temp dir keyed by
+// the repo path when not in a git repo (e.g. --stdin/--patch on a plain folder).
+const reviewDirCache = new Map<string, string>()
+export function reviewDir(repoDir: string): string {
+  const cached = reviewDirCache.get(repoDir)
+  if (cached) return cached
+  let dir: string
+  const res = spawnSync("git", ["rev-parse", "--absolute-git-dir"], { cwd: repoDir, encoding: "utf-8" })
+  const gitDir = res.status === 0 ? (res.stdout || "").trim() : ""
+  if (gitDir) {
+    dir = join(gitDir, "clodiff")
+  } else {
+    const hash = createHash("sha1").update(repoDir).digest("hex").slice(0, 12)
+    dir = join(tmpdir(), "clodiff", hash)
+  }
+  reviewDirCache.set(repoDir, dir)
+  return dir
 }
 
 function sessionPath(repoDir: string): string {
@@ -119,7 +141,7 @@ export async function loadSession(repoDir: string): Promise<SessionFile | null> 
   try {
     data = JSON.parse(raw)
   } catch {
-    throw new Error(`session.json is corrupted (invalid JSON). Delete .review/session.json and rerun clodiff.`)
+    throw new Error(`session.json is corrupted (invalid JSON). Delete ${path} and rerun clodiff.`)
   }
   if (data.version !== 1) {
     throw new Error("Unsupported session version: " + data.version)
@@ -127,37 +149,13 @@ export async function loadSession(repoDir: string): Promise<SessionFile | null> 
   return data as SessionFile
 }
 
-// Save session to repoDir/.review/session.json
-// Creates .review/ directory if needed
-// Adds .review/ to .gitignore if not present
+// Save session to the repo's clodiff dir (see reviewDir). No .gitignore needed —
+// the git dir is never tracked.
 export async function saveSession(repoDir: string, session: SessionFile): Promise<void> {
   const dir = reviewDir(repoDir)
   await mkdir(dir, { recursive: true })
   session.updated_at = new Date().toISOString()
   await writeFile(sessionPath(repoDir), JSON.stringify(session, null, 2))
-  await ensureGitignore(repoDir)
-}
-
-async function ensureGitignore(repoDir: string): Promise<void> {
-  const gitignorePath = join(repoDir, ".gitignore")
-  const entry = ".review/"
-
-  let content = ""
-  if (await fileExists(gitignorePath)) {
-    content = await readFile(gitignorePath, "utf-8")
-  }
-
-  // Check if .review/ is already in the file (as a full line)
-  const lines = content.split("\n")
-  const alreadyPresent = lines.some(line => line.trim() === entry)
-
-  if (!alreadyPresent) {
-    // Append .review/ on a new line
-    const newContent = content.endsWith("\n") || content === ""
-      ? content + entry + "\n"
-      : content + "\n" + entry + "\n"
-    await writeFile(gitignorePath, newContent)
-  }
 }
 
 // Load replies from repoDir/.review/replies.json

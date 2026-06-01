@@ -3,6 +3,7 @@ import path from "path"
 import { existsSync, readFileSync, writeFileSync } from "fs"
 import { watch, mkdirSync } from "fs"
 import type { SessionFile, ReplyEntry } from "./session"
+import { reviewDir } from "./session"
 
 export interface RefEntry {
   name: string
@@ -83,7 +84,7 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
 
           // GET /session — return current session.json
           if (url.pathname === "/session" && req.method === "GET") {
-            const sessionPath = join(repoDir, ".review", "session.json")
+            const sessionPath = join(reviewDir(repoDir), "session.json")
             if (!existsSync(sessionPath)) {
               return new Response("Not Found", { status: 404 })
             }
@@ -108,7 +109,7 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
                 const replyCreatedAt = new Date().toISOString()
 
                 // Persist reply into session.json so the viewer renders it
-                const sessionFilePath = join(repoDir, ".review", "session.json")
+                const sessionFilePath = join(reviewDir(repoDir), "session.json")
                 if (existsSync(sessionFilePath)) {
                   const sessionRaw = readFileSync(sessionFilePath, "utf-8")
                   const session = JSON.parse(sessionRaw) as SessionFile
@@ -146,7 +147,7 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
 
                 // Write to replies.json for monitor (user replies only — Claude doesn't need its own replies)
                 if (source === "user") {
-                  const repliesFilePath = join(repoDir, ".review", "replies.json")
+                  const repliesFilePath = join(reviewDir(repoDir), "replies.json")
                   let replies: ReplyEntry[] = []
                   if (existsSync(repliesFilePath)) {
                     const raw = readFileSync(repliesFilePath, "utf-8")
@@ -170,7 +171,7 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
           if (url.pathname === "/review/body" && req.method === "POST") {
             return req.json().then((body: { body: string }) => {
               try {
-                const sessionFilePath = join(repoDir, ".review", "session.json")
+                const sessionFilePath = join(reviewDir(repoDir), "session.json")
                 if (!existsSync(sessionFilePath)) return new Response("Not Found", { status: 404 })
                 const raw = readFileSync(sessionFilePath, "utf-8")
                 const session = JSON.parse(raw) as SessionFile
@@ -200,7 +201,7 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
             return req.json().then((body: { comment_id: string; body: string }) => {
               try {
                 if (!body.comment_id) return new Response("comment_id required", { status: 400 })
-                const sessionFilePath = join(repoDir, ".review", "session.json")
+                const sessionFilePath = join(reviewDir(repoDir), "session.json")
                 if (!existsSync(sessionFilePath)) return new Response("Not Found", { status: 404 })
                 const raw = readFileSync(sessionFilePath, "utf-8")
                 const session = JSON.parse(raw) as SessionFile
@@ -231,7 +232,7 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
             return req.json().then((body: { comment_id: string }) => {
               try {
                 if (!body.comment_id) return new Response("comment_id required", { status: 400 })
-                const sessionPath = join(repoDir, ".review", "session.json")
+                const sessionPath = join(reviewDir(repoDir), "session.json")
                 if (!existsSync(sessionPath)) return new Response("Not Found", { status: 404 })
                 const raw = readFileSync(sessionPath, "utf-8")
                 const session = JSON.parse(raw) as SessionFile
@@ -273,7 +274,7 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
             return req.json().then((body: { comment_id: string; action: "fix" | "reject" }) => {
               try {
                 if (!body.comment_id) return new Response("comment_id required", { status: 400 })
-                const sessionFilePath = join(repoDir, ".review", "session.json")
+                const sessionFilePath = join(reviewDir(repoDir), "session.json")
                 if (!existsSync(sessionFilePath)) return new Response("Not Found", { status: 404 })
                 const raw = readFileSync(sessionFilePath, "utf-8")
                 const session = JSON.parse(raw) as SessionFile
@@ -301,7 +302,7 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
                   try { client.send(JSON.stringify({ type: "session_update" })) } catch { /* disconnected */ }
                 }
                 // Notify monitor via replies.json without touching session comments
-                const repliesFilePath = join(repoDir, ".review", "replies.json")
+                const repliesFilePath = join(reviewDir(repoDir), "replies.json")
                 let replies: ReplyEntry[] = []
                 if (existsSync(repliesFilePath)) {
                   const r = readFileSync(repliesFilePath, "utf-8")
@@ -325,7 +326,7 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
           if (url.pathname === "/review/event" && req.method === "POST") {
             return req.json().then((body: { event: string }) => {
               try {
-                const sessionPath = join(repoDir, ".review", "session.json")
+                const sessionPath = join(reviewDir(repoDir), "session.json")
                 if (!existsSync(sessionPath)) return new Response("Not Found", { status: 404 })
                 const raw = readFileSync(sessionPath, "utf-8")
                 const session = JSON.parse(raw) as SessionFile
@@ -350,7 +351,7 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
           if (url.pathname === "/push" && req.method === "POST") {
             return (async () => {
               try {
-                const sessionPath = join(repoDir, ".review", "session.json")
+                const sessionPath = join(reviewDir(repoDir), "session.json")
                 if (!existsSync(sessionPath)) return new Response("No session found", { status: 404 })
                 const raw = readFileSync(sessionPath, "utf-8")
                 const session = JSON.parse(raw) as SessionFile
@@ -395,7 +396,7 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
           if (url.pathname === "/triage-submit" && req.method === "POST") {
             return req.json().then(async (reqBody: { request_rereview?: boolean }) => {
               try {
-                const sessionPath = join(repoDir, ".review", "session.json")
+                const sessionPath = join(reviewDir(repoDir), "session.json")
                 if (!existsSync(sessionPath)) return new Response("No session found", { status: 404 })
                 const session = JSON.parse(readFileSync(sessionPath, "utf-8")) as SessionFile
                 const { checkAuth, postThreadReplies, resolveThreads, requestReReview } = await import("./github")
@@ -579,10 +580,10 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
     throw new Error("Failed to start server")
   }
 
-  // Watch .review/ directory for session.json changes and broadcast to WS clients
-  const reviewDir = join(repoDir, ".review")
-  mkdirSync(reviewDir, { recursive: true })
-  watch(reviewDir, { persistent: false }, (event, filename) => {
+  // Watch the clodiff session dir for session.json changes and broadcast to WS clients
+  const watchDir = reviewDir(repoDir)
+  mkdirSync(watchDir, { recursive: true })
+  watch(watchDir, { persistent: false }, (event, filename) => {
     if (filename === "session.json") {
       const msg = JSON.stringify({ type: "session_update", timestamp: Date.now() })
       for (const client of wsClients) {

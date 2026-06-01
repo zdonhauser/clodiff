@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "bun:test"
 import { mkdtemp, rm, mkdir, writeFile } from "fs/promises"
 import { tmpdir } from "os"
 import { join } from "path"
+import { spawnSync } from "child_process"
 import { startServer } from "../server"
 
 let serverResult: Awaited<ReturnType<typeof startServer>>
@@ -10,6 +11,7 @@ let viewerDir: string
 
 beforeAll(async () => {
   tmpDir = await mkdtemp(join(tmpdir(), "clodiff-server-test-"))
+  spawnSync("git", ["init"], { cwd: tmpDir })
   viewerDir = join(tmpDir, "viewer")
   await mkdir(viewerDir, { recursive: true })
 
@@ -71,7 +73,7 @@ describe("server", () => {
     })
 
     it("POST /review/event with valid event updates session", async () => {
-      const reviewDir = join(tmpDir, ".review")
+      const reviewDir = join(tmpDir, ".git", "clodiff")
       await mkdir(reviewDir, { recursive: true })
       const session = {
         version: 1, repo: tmpDir, base_branch: "main",
@@ -103,7 +105,7 @@ describe("server", () => {
 
   describe("POST /reply", () => {
     async function writeSessionWithComment(commentId = "cmt-1") {
-      const reviewDir = join(tmpDir, ".review")
+      const reviewDir = join(tmpDir, ".git", "clodiff")
       await mkdir(reviewDir, { recursive: true })
       const session = {
         version: 1, repo: tmpDir, base_branch: "main",
@@ -140,7 +142,7 @@ describe("server", () => {
 
     it("user reply also writes to replies.json", async () => {
       await writeSessionWithComment("cmt-reply-2")
-      const repliesPath = join(tmpDir, ".review", "replies.json")
+      const repliesPath = join(tmpDir, ".git", "clodiff", "replies.json")
       await (await import("fs/promises")).writeFile(repliesPath, "[]")
       await fetch(`http://localhost:${serverResult.port}/reply`, {
         method: "POST",
@@ -154,9 +156,9 @@ describe("server", () => {
 
     it("claude-code reply persists in session.json but NOT replies.json", async () => {
       await writeSessionWithComment("cmt-reply-3")
-      const repliesPath = join(tmpDir, ".review", "replies.json")
+      const repliesPath = join(tmpDir, ".git", "clodiff", "replies.json")
       await (await import("fs/promises")).writeFile(repliesPath, "[]")
-      const sessionPath = join(tmpDir, ".review", "session.json")
+      const sessionPath = join(tmpDir, ".git", "clodiff", "session.json")
       await fetch(`http://localhost:${serverResult.port}/reply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -173,7 +175,7 @@ describe("server", () => {
 
   describe("POST /resolve with github_thread_id stages the resolve", () => {
     it("adds github_thread_id to pending_resolves", async () => {
-      const reviewDir = join(tmpDir, ".review")
+      const reviewDir = join(tmpDir, ".git", "clodiff")
       await mkdir(reviewDir, { recursive: true })
       const session = {
         version: 1, repo: tmpDir, base_branch: "main",
@@ -205,7 +207,7 @@ describe("server", () => {
     })
 
     it("does not add to pending_resolves for comments without github_thread_id", async () => {
-      const reviewDir = join(tmpDir, ".review")
+      const reviewDir = join(tmpDir, ".git", "clodiff")
       await mkdir(reviewDir, { recursive: true })
       const session = {
         version: 1, repo: tmpDir, base_branch: "main",
@@ -241,7 +243,7 @@ describe("server", () => {
 
   describe("POST /action", () => {
     async function writeSessionForAction(commentId = "act-c1", threadId?: string) {
-      const reviewDir = join(tmpDir, ".review")
+      const reviewDir = join(tmpDir, ".git", "clodiff")
       await mkdir(reviewDir, { recursive: true })
       const comment: Record<string, unknown> = {
         id: commentId, created_at: "2026-01-01T00:00:00Z",
@@ -275,7 +277,7 @@ describe("server", () => {
 
     it("writes action to replies.json for monitor", async () => {
       await writeSessionForAction("act-c3")
-      const repliesPath = join(tmpDir, ".review", "replies.json")
+      const repliesPath = join(tmpDir, ".git", "clodiff", "replies.json")
       await (await import("fs/promises")).writeFile(repliesPath, "[]")
       await fetch(`http://localhost:${serverResult.port}/action`, {
         method: "POST",
@@ -311,7 +313,7 @@ describe("server", () => {
 
   describe("POST /review/body", () => {
     async function writeSessionForBody() {
-      const reviewDir = join(tmpDir, ".review")
+      const reviewDir = join(tmpDir, ".git", "clodiff")
       await mkdir(reviewDir, { recursive: true })
       const session = {
         version: 1, repo: tmpDir, base_branch: "main",
@@ -337,7 +339,7 @@ describe("server", () => {
     })
 
     it("returns 404 when no session.json exists", async () => {
-      await (await import("fs/promises")).rm(join(tmpDir, ".review", "session.json"), { force: true })
+      await (await import("fs/promises")).rm(join(tmpDir, ".git", "clodiff", "session.json"), { force: true })
       const res = await fetch(`http://localhost:${serverResult.port}/review/body`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -362,7 +364,7 @@ describe("server", () => {
 
   describe("POST /edit-comment", () => {
     async function writeSessionForEdit(commentId = "cmt-edit-1") {
-      const reviewDir = join(tmpDir, ".review")
+      const reviewDir = join(tmpDir, ".git", "clodiff")
       await mkdir(reviewDir, { recursive: true })
       const session = {
         version: 1, repo: tmpDir, base_branch: "main",
