@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from "bun:test"
+import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import { mkdtemp, rm, mkdir, writeFile } from "fs/promises"
 import { tmpdir } from "os"
 import { join } from "path"
@@ -27,7 +27,7 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  serverResult.server.stop(true)
+  serverResult.server.close()
   await rm(tmpDir, { recursive: true, force: true })
 })
 
@@ -439,7 +439,7 @@ describe("server", () => {
       try {
         expect(result2.port).toBeGreaterThan(17777)
       } finally {
-        result2.server.stop(true)
+        result2.server.close()
         await rm(tmpDir2, { recursive: true, force: true })
       }
     })

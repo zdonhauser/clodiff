@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test"
+import { describe, it, expect } from "vitest"
 import { reanchorComments } from "../anchoring"
 import type { ReviewComment } from "../session"
 import type { DiffFile } from "../diff-parser"

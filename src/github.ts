@@ -1,4 +1,45 @@
 import type { Review, ReviewComment, PRMeta } from "./session"
+import { spawn as cpSpawn } from "child_process"
+
+// Minimal spawn interface the GitHub helpers rely on (a subset of what Bun.spawn
+// exposed). Injectable for tests; defaults to a Node child_process adapter.
+export interface SpawnedProc {
+  exited: Promise<number>
+  exitCode: number
+  stdout: { text(): Promise<string> }
+  stderr: { text(): Promise<string> }
+}
+export type SpawnFn = (
+  argv: string[],
+  opts?: { stdout?: string; stderr?: string; cwd?: string; stdin?: Buffer },
+) => SpawnedProc
+
+export const nodeSpawn: SpawnFn = (argv, opts = {}) => {
+  const child = cpSpawn(argv[0], argv.slice(1), { cwd: opts.cwd, stdio: ["pipe", "pipe", "pipe"] })
+  if (opts.stdin) child.stdin?.end(opts.stdin)
+  else child.stdin?.end()
+  const collect = (stream: NodeJS.ReadableStream | null): Promise<string> =>
+    new Promise((resolve) => {
+      if (!stream) return resolve("")
+      let data = ""
+      stream.on("data", (c) => { data += c })
+      stream.on("end", () => resolve(data))
+      stream.on("error", () => resolve(data))
+    })
+  const outP = collect(child.stdout)
+  const errP = collect(child.stderr)
+  let exitCode = 0
+  const exited = new Promise<number>((resolve) => {
+    child.on("close", (code) => { exitCode = code ?? 0; resolve(exitCode) })
+    child.on("error", () => { exitCode = 1; resolve(1) })
+  })
+  return {
+    exited,
+    get exitCode() { return exitCode },
+    stdout: { text: () => outP },
+    stderr: { text: () => errP },
+  }
+}
 
 export interface GitHubComment {
   path: string
@@ -34,7 +75,7 @@ export interface PRInfo {
 // The authenticated gh user's login — used to tell "your own PR" from others'.
 export async function getViewerLogin(
   repoDir: string,
-  _spawn: typeof Bun.spawn = Bun.spawn,
+  _spawn: SpawnFn = nodeSpawn,
 ): Promise<string> {
   try {
     const proc = _spawn(["gh", "api", "user", "--jq", ".login"], {
@@ -64,7 +105,7 @@ function toGitHubComment(rc: ReviewComment): GitHubComment {
 
 async function getRepoOwnerName(
   repoDir: string,
-  _spawn: typeof Bun.spawn,
+  _spawn: SpawnFn,
 ): Promise<{ owner: string; name: string }> {
   const proc = _spawn(["gh", "repo", "view", "--json", "owner,name"], {
     stdout: "pipe",
@@ -96,7 +137,7 @@ function deriveChecksStatus(rollup: Array<Record<string, unknown>>): PRMeta["che
 export async function fetchPRInfo(
   repoDir: string,
   prNumber?: number,
-  _spawn: typeof Bun.spawn = Bun.spawn,
+  _spawn: SpawnFn = nodeSpawn,
 ): Promise<PRInfo | null> {
   const fields = "number,title,author,body,state,isDraft,baseRefName,headRefName,headRefOid,statusCheckRollup"
   const argv = prNumber !== undefined
@@ -181,7 +222,7 @@ interface RestReviewComment {
 async function ghPaginated<T>(
   repoDir: string,
   endpoint: string,
-  _spawn: typeof Bun.spawn,
+  _spawn: SpawnFn,
 ): Promise<T[]> {
   const proc = _spawn(["gh", "api", "--paginate", "--slurp", endpoint], {
     stdout: "pipe", stderr: "pipe", cwd: repoDir,
@@ -200,7 +241,7 @@ export async function fetchPRThreads(
   repoDir: string,
   prNumber: number,
   headSha: string,
-  _spawn: typeof Bun.spawn = Bun.spawn,
+  _spawn: SpawnFn = nodeSpawn,
 ): Promise<ReviewComment[]> {
   let owner: string, name: string
   try {
@@ -317,7 +358,7 @@ export async function fetchPRThreads(
 export async function fetchPRConversation(
   repoDir: string,
   prNumber: number,
-  _spawn: typeof Bun.spawn = Bun.spawn,
+  _spawn: SpawnFn = nodeSpawn,
 ): Promise<import("./session").ConversationComment[]> {
   let owner: string, name: string
   try {
@@ -382,7 +423,7 @@ mutation ResolveThread($threadId: ID!) {
 export async function resolveThreads(
   repoDir: string,
   threadIds: string[],
-  _spawn: typeof Bun.spawn = Bun.spawn,
+  _spawn: SpawnFn = nodeSpawn,
 ): Promise<void> {
   if (threadIds.length === 0) return
 
@@ -410,7 +451,7 @@ export async function resolveThreads(
   }
 }
 
-export async function checkAuth(_spawn: typeof Bun.spawn = Bun.spawn): Promise<boolean> {
+export async function checkAuth(_spawn: SpawnFn = nodeSpawn): Promise<boolean> {
   const proc = _spawn(["gh", "auth", "status"], { stdout: "pipe", stderr: "pipe" })
   await proc.exited
   return proc.exitCode === 0
@@ -418,7 +459,7 @@ export async function checkAuth(_spawn: typeof Bun.spawn = Bun.spawn): Promise<b
 
 export async function findOpenPR(
   repoDir: string,
-  _spawn: typeof Bun.spawn = Bun.spawn,
+  _spawn: SpawnFn = nodeSpawn,
 ): Promise<number | null> {
   const proc = _spawn(["gh", "pr", "view", "--json", "number"], {
     stdout: "pipe",
@@ -460,7 +501,7 @@ export async function pushReview(
   repoDir: string,
   prNumber: number,
   payload: GitHubReviewPayload,
-  _spawn: typeof Bun.spawn = Bun.spawn,
+  _spawn: SpawnFn = nodeSpawn,
 ): Promise<void> {
   const { owner, name: repo } = await getRepoOwnerName(repoDir, _spawn)
   const endpoint = `/repos/${owner}/${repo}/pulls/${prNumber}/reviews`
@@ -483,7 +524,7 @@ export async function postThreadReplies(
   repoDir: string,
   prNumber: number,
   replies: Array<{ in_reply_to: number; body: string }>,
-  _spawn: typeof Bun.spawn = Bun.spawn,
+  _spawn: SpawnFn = nodeSpawn,
 ): Promise<number> {
   if (!replies || replies.length === 0) return 0
   let owner: string, repo: string
@@ -515,7 +556,7 @@ export async function requestReReview(
   repoDir: string,
   prNumber: number,
   reviewers: string[],
-  _spawn: typeof Bun.spawn = Bun.spawn,
+  _spawn: SpawnFn = nodeSpawn,
 ): Promise<number> {
   if (!reviewers || reviewers.length === 0) return 0
   let owner: string, repo: string

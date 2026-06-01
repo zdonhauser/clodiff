@@ -8,6 +8,9 @@ import type { ChildProcess } from "child_process"
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url))
 const CLI_PATH = join(__dirname, "..", "..", "src", "cli.ts")
+// Launch the CLI through tsx so it runs on any Node version (Node 22.18+ runs
+// the .ts natively, but tsx keeps the test green on older local Node too).
+const TSX_BIN = join(__dirname, "..", "..", "node_modules", ".bin", "tsx")
 
 const E2E_PORT = 17900
 
@@ -67,7 +70,7 @@ export const test = base.extend<{ server: ServerContext }>({
       let proc: ChildProcess | null = null
 
       try {
-        proc = spawn("bun", ["run", CLI_PATH, "--from", "HEAD~1", "--to", "HEAD", "--port", String(E2E_PORT)], {
+        proc = spawn(TSX_BIN, [CLI_PATH, "--from", "HEAD~1", "--to", "HEAD", "--port", String(E2E_PORT)], {
           cwd: repoDir,
           env: { ...process.env, CI: "1" },
           stdio: "pipe",

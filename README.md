@@ -15,32 +15,19 @@ A local code review viewer for Claude Code. Run it in any repo and Claude can na
 
 ## Installation
 
-clodiff runs on [Bun](https://bun.sh). Install Bun first if you don't have it:
+Requires [Node.js](https://nodejs.org) **≥ 22.18** (clodiff runs its TypeScript
+directly via Node's built-in type stripping — no build step, no extra runtime).
 
 ```bash
-# macOS / Linux / WSL
-curl -fsSL https://bun.sh/install | bash
-# Windows (PowerShell)
-powershell -c "irm bun.sh/install.ps1 | iex"
-```
-
-(`which bun` should print a path afterwards; you may need to restart your shell so `~/.bun/bin` is on `PATH`.)
-
-Then install clodiff and run it:
-
-```bash
-bun add -g clodiff
+npm install -g clodiff
 clodiff
 ```
 
 Or run without installing:
 
 ```bash
-bunx clodiff
+npx clodiff
 ```
-
-> In sandboxed environments where `bunx`'s download-and-execute is blocked,
-> use the global install (`bun add -g clodiff`) and run the `clodiff` binary.
 
 ---
 
@@ -219,6 +206,10 @@ This installs two skills and three hooks:
 ## Development
 
 ```bash
-bun install
-bun test        # 150 tests across server, CLI, diff parser, GitHub API, anchoring
+npm install
+npm test            # unit tests (vitest)
+npm run test:e2e    # Playwright end-to-end tests
 ```
+
+Runs on Node ≥ 22.18 (native TypeScript). Tests use vitest; the CLI is launched
+via `tsx` in the E2E harness so it works on older Node too.

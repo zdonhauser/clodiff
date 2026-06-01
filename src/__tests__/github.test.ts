@@ -1,5 +1,5 @@
-import { describe, it, expect } from "bun:test"
-import { checkAuth, findOpenPR, buildReviewPayload, pushReview, fetchPRInfo, fetchPRThreads, resolveThreads, postThreadReplies, requestReReview } from "../github"
+import { describe, it, expect } from "vitest"
+import { checkAuth, findOpenPR, buildReviewPayload, pushReview, fetchPRInfo, fetchPRThreads, resolveThreads, postThreadReplies, requestReReview, type SpawnFn } from "../github"
 import type { Review, ReviewComment } from "../session"
 
 type SpawnResult = {
@@ -23,7 +23,7 @@ function makeSpawn(responses: Array<{ exitCode: number; stdout?: string; stderr?
       stderr: { text: async () => res.stderr ?? "" },
     }
   }
-  return { spawn: spawn as unknown as typeof Bun.spawn, calls }
+  return { spawn: spawn as unknown as SpawnFn, calls }
 }
 
 function makeReview(overrides?: Partial<Review>): Review {

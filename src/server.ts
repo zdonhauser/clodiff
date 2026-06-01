@@ -2,8 +2,72 @@ import { join } from "path"
 import path from "path"
 import { existsSync, readFileSync, writeFileSync } from "fs"
 import { watch, mkdirSync } from "fs"
+import { readFile } from "fs/promises"
+import { createServer } from "http"
+import type { IncomingMessage, ServerResponse, Server } from "http"
+import { WebSocketServer, type WebSocket } from "ws"
 import type { SessionFile, ReplyEntry } from "./session"
 import { reviewDir } from "./session"
+
+// ── Node bridge: translate between Node's http req/res and the web-standard
+// Request/Response the route handlers are written against. ───────────────────
+async function toWebRequest(nodeReq: IncomingMessage): Promise<Request> {
+  const method = nodeReq.method || "GET"
+  const headers = new Headers()
+  for (const [k, v] of Object.entries(nodeReq.headers)) {
+    if (Array.isArray(v)) v.forEach((val) => headers.append(k, val))
+    else if (v != null) headers.set(k, v)
+  }
+  let body: Buffer | undefined
+  if (method !== "GET" && method !== "HEAD") {
+    const chunks: Buffer[] = []
+    for await (const c of nodeReq) chunks.push(c as Buffer)
+    body = Buffer.concat(chunks)
+  }
+  return new Request(`http://localhost${nodeReq.url || "/"}`, {
+    method, headers, body: body && body.length ? body : undefined,
+  })
+}
+
+async function writeWebResponse(res: Response, nodeRes: ServerResponse): Promise<void> {
+  const headers: Record<string, string> = {}
+  res.headers.forEach((v, k) => { headers[k] = v })
+  nodeRes.writeHead(res.status, headers)
+  nodeRes.end(Buffer.from(await res.arrayBuffer()))
+}
+
+const CONTENT_TYPES: Record<string, string> = {
+  html: "text/html; charset=utf-8", js: "text/javascript; charset=utf-8",
+  css: "text/css; charset=utf-8", json: "application/json; charset=utf-8",
+  svg: "image/svg+xml", map: "application/json",
+}
+async function fileResponse(filePath: string, extraHeaders: Record<string, string> = {}): Promise<Response> {
+  const buf = await readFile(filePath)
+  const ext = filePath.split(".").pop() || ""
+  return new Response(buf, {
+    headers: { "Content-Type": CONTENT_TYPES[ext] || "application/octet-stream", ...extraHeaders },
+  })
+}
+
+function listenWithRetry(server: Server, startPort: number, maxAttempts: number): Promise<number> {
+  // Single persistent handlers (don't re-register per attempt, or stale
+  // "listening" callbacks from failed binds resolve with the wrong port), and
+  // resolve with the actual bound port from server.address().
+  return new Promise((resolve, reject) => {
+    let attempt = 0
+    const onError = (err: NodeJS.ErrnoException) => {
+      if (err.code === "EADDRINUSE" && attempt < maxAttempts - 1) { attempt++; server.listen(startPort + attempt) }
+      else reject(err)
+    }
+    server.on("error", onError)
+    server.once("listening", () => {
+      server.removeListener("error", onError)
+      const addr = server.address()
+      resolve(addr && typeof addr === "object" ? addr.port : startPort + attempt)
+    })
+    server.listen(startPort)
+  })
+}
 
 export interface RefEntry {
   name: string
@@ -22,34 +86,21 @@ export interface ServerOptions {
 }
 
 export interface StartServerResult {
+  // (server is a Node http.Server; call .close() to stop)
   port: number
-  server: ReturnType<typeof Bun.serve>
+  server: Server
 }
 
 export async function startServer(options: ServerOptions): Promise<StartServerResult> {
   const { repoDir, viewerDir, getInitPayload, getRefs, onRediff } = options
   const wsClients = new Set<WebSocket>()
 
-  // Try to start on the specified port, auto-increment if taken
-  let port = options.port
-  let server: ReturnType<typeof Bun.serve> | null = null
-  const maxAttempts = 10
-
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+  // Route handler — written against web-standard Request/Response. The Node http
+  // server below bridges to it. WebSocket upgrades are handled separately (the
+  // http "upgrade" event), so there's no /ws branch here.
+  async function handleRequest(req: Request): Promise<Response> {
     try {
-      const currentPort = port + attempt
-
-      server = Bun.serve({
-        port: currentPort,
-        async fetch(req, server) {
           const url = new URL(req.url)
-
-          // WebSocket upgrade
-          if (url.pathname === "/ws") {
-            const success = server.upgrade(req)
-            if (success) return undefined
-            return new Response("WebSocket upgrade failed", { status: 400 })
-          }
 
           // Broadcast endpoint
           if (url.pathname === "/_ws_broadcast" && req.method === "POST") {
@@ -446,7 +497,7 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
             }
             if (!existsSync(abs)) return new Response("Not Found", { status: 404 })
             try {
-              return new Response(Bun.file(abs), {
+              return new Response(await readFile(abs), {
                 headers: { "Content-Type": "text/plain; charset=utf-8" },
               })
             } catch {
@@ -531,54 +582,46 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
           }
 
           if (existsSync(filePath)) {
-            return new Response(Bun.file(filePath))
+            return fileResponse(filePath)
           }
 
           return new Response("Not Found", { status: 404 })
-        },
-
-        websocket: {
-          open(ws) {
-            wsClients.add(ws as unknown as WebSocket)
-            if (getInitPayload) {
-              Promise.resolve(getInitPayload()).then((payload) => {
-                ws.send(JSON.stringify(payload))
-              }).catch(() => {
-                // Don't crash on init payload errors
-              })
-            }
-          },
-          close(ws) {
-            wsClients.delete(ws as unknown as WebSocket)
-          },
-          message(_ws, _message) {
-            // No-op for now
-          },
-        },
-
-        error(err) {
-          return new Response("Server error: " + err.message, { status: 500 })
-        },
-      })
-
-      port = currentPort
-      break
     } catch (err: unknown) {
-      const error = err as NodeJS.ErrnoException
-      // EADDRINUSE means port is taken, try next one
-      if (error.code === "EADDRINUSE" || (error.message && error.message.includes("in use"))) {
-        if (attempt === maxAttempts - 1) {
-          throw new Error(`Could not find available port after ${maxAttempts} attempts`)
-        }
-        continue
-      }
-      throw err
+      return new Response("Server error: " + (err instanceof Error ? err.message : "unknown"), { status: 500 })
     }
   }
 
-  if (!server) {
-    throw new Error("Failed to start server")
-  }
+  // WebSocket server (upgrade handled below). On connect, push the init payload.
+  const wss = new WebSocketServer({ noServer: true })
+  wss.on("connection", (ws: WebSocket) => {
+    wsClients.add(ws)
+    if (getInitPayload) {
+      Promise.resolve(getInitPayload())
+        .then((payload) => ws.send(JSON.stringify(payload)))
+        .catch(() => { /* don't crash on init payload errors */ })
+    }
+    ws.on("close", () => wsClients.delete(ws))
+    ws.on("error", () => wsClients.delete(ws))
+  })
+
+  // Node http server bridging to the web-standard handleRequest.
+  const server = createServer((nodeReq, nodeRes) => {
+    toWebRequest(nodeReq)
+      .then(handleRequest)
+      .then((res) => writeWebResponse(res, nodeRes))
+      .catch(() => { nodeRes.writeHead(500); nodeRes.end("Internal Server Error") })
+  })
+  server.on("upgrade", (nodeReq, socket, head) => {
+    const url = new URL(nodeReq.url || "/", "http://localhost")
+    if (url.pathname === "/ws") {
+      wss.handleUpgrade(nodeReq, socket, head, (ws) => wss.emit("connection", ws, nodeReq))
+    } else {
+      socket.destroy()
+    }
+  })
+
+  // Listen, auto-incrementing the port if taken.
+  const port = await listenWithRetry(server, options.port, 10)
 
   // Watch the clodiff session dir for session.json changes and broadcast to WS clients
   const watchDir = reviewDir(repoDir)

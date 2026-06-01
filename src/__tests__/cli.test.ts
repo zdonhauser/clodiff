@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test"
+import { describe, it, expect } from "vitest"
 import { parseArgs } from "../cli"
 
 describe("CLI args", () => {

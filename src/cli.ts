@@ -1,7 +1,8 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 import { readFile } from "fs/promises"
-import { join, dirname } from "path"
+import { join } from "path"
 import { spawnSync } from "child_process"
+import { fileURLToPath } from "url"
 import { parseDiff } from "./diff-parser"
 import { loadSession, saveSession } from "./session"
 import type { SessionFile, Review } from "./session"
@@ -302,7 +303,7 @@ export async function main(): Promise<void> {
   const { port, server: _server } = await startServer({
     port: args.port,
     repoDir,
-    viewerDir: join(dirname(import.meta.path), "..", "viewer"),
+    viewerDir: join(import.meta.dirname, "..", "viewer"),
     getInitPayload: async () => {
       const freshSession = (await loadSession(repoDir)) ?? session
       return {
@@ -340,6 +341,6 @@ export async function main(): Promise<void> {
   console.log(`clodiff: listening at ${url}`)
 }
 
-if (import.meta.main) {
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
   main().catch(console.error)
 }
