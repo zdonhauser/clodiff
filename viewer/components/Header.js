@@ -177,6 +177,20 @@ export function Header({ session, comments = [], fileCount, wsStatus, viewMode, 
           }}>
             #${session.pr_meta.number}
           </span>
+          <!-- State badge (draft / merged / closed; open shows nothing) -->
+          ${(session.pr_meta.is_draft || (session.pr_meta.state && session.pr_meta.state !== "OPEN")) && html`
+            <span style=${{
+              flexShrink: 0, fontWeight: "700", fontSize: "11px", textTransform: "uppercase",
+              letterSpacing: "0.04em", borderRadius: "var(--radius-sm)", padding: "0px 6px",
+              ...(session.pr_meta.is_draft
+                ? { color: "var(--color-fg-muted)", background: "var(--color-fg-muted)15", border: "1px solid var(--color-fg-muted)35" }
+                : session.pr_meta.state === "MERGED"
+                  ? { color: "#8957e5", background: "#8957e515", border: "1px solid #8957e535" }
+                  : { color: "var(--color-danger-fg)", background: "var(--color-danger-fg)15", border: "1px solid var(--color-danger-fg)35" }),
+            }}>
+              ${session.pr_meta.is_draft ? "Draft" : session.pr_meta.state === "MERGED" ? "Merged" : "Closed"}
+            </span>
+          `}
           <!-- Title -->
           <span style=${{
             color: "var(--color-fg-default)",
@@ -187,9 +201,9 @@ export function Header({ session, comments = [], fileCount, wsStatus, viewMode, 
             flex: 1,
             minWidth: 0,
           }}>${session.pr_meta.title}</span>
-          <!-- Author -->
+          <!-- Author (· you when triaging your own PR) -->
           <span style=${{ color: "var(--color-fg-muted)", flexShrink: 0, whiteSpace: "nowrap" }}>
-            @${session.pr_meta.author}
+            @${session.pr_meta.author}${session.pr_meta.viewer_is_author ? " · you" : ""}
           </span>
           <!-- CI status -->
           ${session.pr_meta.checks_status && session.pr_meta.checks_status !== "neutral" && html`

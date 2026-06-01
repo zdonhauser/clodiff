@@ -14,6 +14,7 @@ export interface ReviewComment {
   is_outdated?: boolean
 
   // GitHub import fields (set when comment was fetched from GitHub)
+  author?: string          // GitHub login of the commenter (imported comments only)
   github_id?: number       // REST API databaseId — used to deduplicate imports
   github_thread_id?: string // GraphQL PRRT_xxx node ID — used for staged resolves
 
@@ -37,11 +38,27 @@ export interface Review {
   created_at: string
 }
 
+// A PR-level (not line-anchored) comment: either a top-level conversation
+// comment or a review summary body with its decision.
+export interface ConversationComment {
+  id: string
+  author: string
+  body: string
+  created_at: string
+  kind: "comment" | "review_summary"
+  state?: "APPROVED" | "CHANGES_REQUESTED" | "COMMENTED" | "DISMISSED"
+  github_id?: number
+}
+
 export interface PRMeta {
   number: number
   title: string
   author: string
   body?: string
+  state?: "OPEN" | "CLOSED" | "MERGED"
+  is_draft?: boolean
+  viewer_login?: string      // the authenticated gh user
+  viewer_is_author?: boolean // true when you're triaging your own PR
   checks_status?: "success" | "failure" | "pending" | "neutral"
 }
 

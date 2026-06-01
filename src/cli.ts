@@ -6,7 +6,7 @@ import { loadSession, saveSession } from "./session"
 import type { SessionFile, Review } from "./session"
 import { reanchorComments } from "./anchoring"
 import { startServer } from "./server"
-import { fetchPRInfo, fetchPRThreads } from "./github"
+import { fetchPRInfo, fetchPRThreads, fetchPRConversation } from "./github"
 
 export interface CliArgs {
   base: string
@@ -218,6 +218,10 @@ export async function main(): Promise<void> {
       title: prInfo.title,
       author: prInfo.author,
       body: prInfo.body,
+      state: prInfo.state?.toUpperCase() as "OPEN" | "CLOSED" | "MERGED" | undefined,
+      is_draft: prInfo.is_draft,
+      viewer_login: prInfo.viewer_login,
+      viewer_is_author: !!prInfo.viewer_login && prInfo.viewer_login === prInfo.author,
       checks_status: prInfo.checks_status,
     } : undefined
 
@@ -234,12 +238,19 @@ export async function main(): Promise<void> {
       updated_at: now,
     }
 
-    // Import existing GitHub PR review threads on fresh session
+    // Import existing GitHub PR review threads + the top-level conversation
     if (prNumber && headCommit) {
-      const existingThreads = await fetchPRThreads(repoDir, prNumber, headCommit)
+      const [existingThreads, conversation] = await Promise.all([
+        fetchPRThreads(repoDir, prNumber, headCommit),
+        fetchPRConversation(repoDir, prNumber),
+      ])
       if (existingThreads.length > 0) {
         console.log(`clodiff: importing ${existingThreads.length} existing review thread(s)`)
         review.comments.push(...existingThreads)
+      }
+      if (conversation.length > 0) {
+        console.log(`clodiff: importing ${conversation.length} conversation comment(s)`)
+        session.pr_conversation = conversation
       }
     }
   }

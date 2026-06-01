@@ -32,8 +32,9 @@ const SEVERITY_COLORS = {
  */
 export function SubmitReviewModal({ comments = [], session, onClose, onSubmit }) {
   const existing = session?.reviews?.[session.reviews.length - 1]
-  // Can't APPROVE your own PR — GitHub returns 422
-  const isOwnPR = session?.pr_meta?.author === session?.pr_meta?._currentUser
+  // Can't APPROVE your own PR — GitHub returns 422. viewer_is_author is set by
+  // the CLI from the authenticated gh user vs the PR author.
+  const isOwnPR = !!session?.pr_meta?.viewer_is_author
   const [event, setEvent] = useState(existing?.event === "APPROVE" && isOwnPR ? "COMMENT" : existing?.event || "COMMENT")
   const [body, setBody] = useState(existing?.body || "")
   const [submitting, setSubmitting] = useState(false)

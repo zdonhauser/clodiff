@@ -23,10 +23,30 @@ export interface PRInfo {
   author: string
   body: string
   state: string
+  is_draft: boolean
   baseRefName: string
   headRefName: string
   headSha: string
+  viewer_login: string
   checks_status: PRMeta["checks_status"]
+}
+
+// The authenticated gh user's login — used to tell "your own PR" from others'.
+export async function getViewerLogin(
+  repoDir: string,
+  _spawn: typeof Bun.spawn = Bun.spawn,
+): Promise<string> {
+  try {
+    const proc = _spawn(["gh", "api", "user", "--jq", ".login"], {
+      stdout: "pipe", stderr: "pipe", cwd: repoDir,
+    })
+    await proc.exited
+    if (proc.exitCode !== 0) return ""
+    const text = await (proc.stdout as { text(): Promise<string> }).text()
+    return text.trim()
+  } catch {
+    return ""
+  }
 }
 
 function toGitHubComment(rc: ReviewComment): GitHubComment {
@@ -78,7 +98,7 @@ export async function fetchPRInfo(
   prNumber?: number,
   _spawn: typeof Bun.spawn = Bun.spawn,
 ): Promise<PRInfo | null> {
-  const fields = "number,title,author,body,state,baseRefName,headRefName,headRefOid,statusCheckRollup"
+  const fields = "number,title,author,body,state,isDraft,baseRefName,headRefName,headRefOid,statusCheckRollup"
   const argv = prNumber !== undefined
     ? ["gh", "pr", "view", String(prNumber), "--json", fields]
     : ["gh", "pr", "view", "--json", fields]
@@ -94,6 +114,7 @@ export async function fetchPRInfo(
       author: { login: string }
       body: string
       state: string
+      isDraft: boolean
       baseRefName: string
       headRefName: string
       headRefOid: string
@@ -105,9 +126,11 @@ export async function fetchPRInfo(
       author: d.author?.login ?? "unknown",
       body: d.body ?? "",
       state: d.state,
+      is_draft: d.isDraft ?? false,
       baseRefName: d.baseRefName,
       headRefName: d.headRefName,
       headSha: d.headRefOid,
+      viewer_login: await getViewerLogin(repoDir, _spawn),
       checks_status: deriveChecksStatus(d.statusCheckRollup ?? []),
     }
   } catch {
@@ -115,6 +138,8 @@ export async function fetchPRInfo(
   }
 }
 
+// Thread structure + resolve state come from GraphQL (REST doesn't expose them);
+// per-comment side/range/author/reply-links come from REST (GraphQL has no `side`).
 const PR_THREADS_QUERY = `
 query GetPRThreads($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
@@ -123,23 +148,47 @@ query GetPRThreads($owner: String!, $repo: String!, $number: Int!) {
         nodes {
           id
           isResolved
-          comments(first: 50) {
-            nodes {
-              databaseId
-              body
-              path
-              line
-              originalLine
-              author { login }
-              createdAt
-              outdated
-            }
+          comments(first: 100) {
+            nodes { fullDatabaseId outdated }
           }
         }
       }
     }
   }
 }`.trim()
+
+// One review comment as returned by the REST pulls/{n}/comments endpoint.
+interface RestReviewComment {
+  id: number
+  user: { login: string } | null
+  body: string
+  path: string
+  line: number | null
+  original_line: number | null
+  start_line: number | null
+  start_side: "LEFT" | "RIGHT" | null
+  side: "LEFT" | "RIGHT" | null
+  subject_type?: "line" | "file"
+  in_reply_to_id?: number
+  created_at: string
+}
+
+async function ghJson<T>(
+  repoDir: string,
+  endpoint: string,
+  _spawn: typeof Bun.spawn,
+): Promise<T | null> {
+  const proc = _spawn(["gh", "api", endpoint], {
+    stdout: "pipe", stderr: "pipe", cwd: repoDir,
+  })
+  await proc.exited
+  if (proc.exitCode !== 0) return null
+  try {
+    return JSON.parse(await (proc.stdout as { text(): Promise<string> }).text()) as T
+  } catch {
+    return null
+  }
+}
 
 export async function fetchPRThreads(
   repoDir: string,
@@ -156,73 +205,150 @@ export async function fetchPRThreads(
     return []
   }
 
+  // 1. REST comments — full per-comment detail (side, ranges, author, reply links)
+  const rest = await ghJson<RestReviewComment[]>(
+    repoDir, `/repos/${owner}/${name}/pulls/${prNumber}/comments?per_page=100`, _spawn,
+  )
+  if (!Array.isArray(rest) || rest.length === 0) return []
+
+  // 2. GraphQL threads — map each comment's databaseId to its thread + resolve state
   const gqlBody = JSON.stringify({
     query: PR_THREADS_QUERY,
     variables: { owner, repo: name, number: prNumber },
   })
-  const proc = _spawn(
+  const gproc = _spawn(
     ["gh", "api", "graphql", "--input", "-"],
     { stdout: "pipe", stderr: "pipe", stdin: Buffer.from(gqlBody) },
   )
-  await proc.exited
-  if (proc.exitCode !== 0) return []
-
-  try {
-    const text = await (proc.stdout as { text(): Promise<string> }).text()
-    const resp = JSON.parse(text) as {
-      data: {
-        repository: {
-          pullRequest: {
-            reviewThreads: {
-              nodes: Array<{
-                id: string
-                isResolved: boolean
-                comments: {
-                  nodes: Array<{
-                    databaseId: number
-                    body: string
-                    path: string
-                    line: number | null
-                    originalLine: number | null
-                    author: { login: string }
-                    createdAt: string
-                    outdated: boolean
-                  }>
-                }
-              }>
-            }
-          }
+  await gproc.exited
+  const threadOf = new Map<number, { threadId: string; resolved: boolean; outdated: boolean }>()
+  if (gproc.exitCode === 0) {
+    try {
+      const resp = JSON.parse(await (gproc.stdout as { text(): Promise<string> }).text()) as {
+        data?: { repository?: { pullRequest?: { reviewThreads?: { nodes?: Array<{
+          id: string; isResolved: boolean
+          comments: { nodes: Array<{ fullDatabaseId: string | null; outdated: boolean }> }
+        }> } } } }
+      }
+      for (const t of resp?.data?.repository?.pullRequest?.reviewThreads?.nodes ?? []) {
+        for (const c of t.comments.nodes) {
+          if (c.fullDatabaseId == null) continue
+          threadOf.set(Number(c.fullDatabaseId), { threadId: t.id, resolved: t.isResolved, outdated: c.outdated })
         }
       }
+    } catch { /* fall back to no thread/resolve info */ }
+  }
+
+  // 3. Group REST comments into threads by in_reply_to chains; map to ReviewComment.
+  const byId = new Map<number, RestReviewComment>(rest.map((c) => [c.id, c]))
+  const rootOf = (c: RestReviewComment): RestReviewComment => {
+    let cur = c
+    const seen = new Set<number>()
+    while (cur.in_reply_to_id != null && byId.has(cur.in_reply_to_id) && !seen.has(cur.id)) {
+      seen.add(cur.id)
+      cur = byId.get(cur.in_reply_to_id)!
     }
+    return cur
+  }
 
-    const threads = resp?.data?.repository?.pullRequest?.reviewThreads?.nodes ?? []
-    const comments: ReviewComment[] = []
-
-    for (const thread of threads) {
-      const firstComment = thread.comments.nodes[0]
-      if (!firstComment) continue
-      const line = firstComment.line ?? firstComment.originalLine ?? 1
-      comments.push({
-        id: crypto.randomUUID(),
-        created_at: firstComment.createdAt,
-        source: "user",
-        body: firstComment.body,
-        path: firstComment.path,
-        commit_id: headSha,
-        line,
-        side: "RIGHT",
-        resolved: thread.isResolved,
-        is_outdated: firstComment.outdated,
-        github_id: firstComment.databaseId,
-        github_thread_id: thread.id,
-      })
+  const toComment = (c: RestReviewComment): ReviewComment => {
+    const meta = threadOf.get(c.id)
+    const rc: ReviewComment = {
+      id: crypto.randomUUID(),
+      created_at: c.created_at,
+      source: "user",
+      author: c.user?.login ?? "unknown",
+      body: c.body,
+      path: c.path,
+      commit_id: headSha,
+      line: c.line ?? c.original_line ?? 1,
+      side: c.side ?? "RIGHT",
+      resolved: meta?.resolved ?? false,
+      is_outdated: meta?.outdated ?? (c.line == null && c.original_line != null),
+      github_id: c.id,
     }
+    if (c.start_line != null) rc.start_line = c.start_line
+    if (c.start_side != null) rc.start_side = c.start_side
+    if (meta?.threadId) rc.github_thread_id = meta.threadId
+    return rc
+  }
 
-    return comments
+  const roots: ReviewComment[] = []
+  const repliesByRoot = new Map<number, ReviewComment[]>()
+  for (const c of rest) {
+    const root = rootOf(c)
+    if (root.id === c.id) {
+      roots.push(toComment(c))
+    } else {
+      const list = repliesByRoot.get(root.id) ?? []
+      list.push(toComment(c))
+      repliesByRoot.set(root.id, list)
+    }
+  }
+  for (const root of roots) {
+    const replies = repliesByRoot.get(root.github_id!)
+    if (replies && replies.length) root.replies = replies
+  }
+  return roots
+}
+
+// Top-level PR comments (issue comments) and review summary bodies — the
+// conversation that isn't pinned to a diff line.
+export async function fetchPRConversation(
+  repoDir: string,
+  prNumber: number,
+  _spawn: typeof Bun.spawn = Bun.spawn,
+): Promise<import("./session").ConversationComment[]> {
+  let owner: string, name: string
+  try {
+    const r = await getRepoOwnerName(repoDir, _spawn)
+    owner = r.owner
+    name = r.name
   } catch {
     return []
   }
+
+  const out: import("./session").ConversationComment[] = []
+
+  // Issue comments = the top-level PR conversation
+  const issueComments = await ghJson<Array<{
+    id: number; user: { login: string } | null; body: string; created_at: string
+  }>>(repoDir, `/repos/${owner}/${name}/issues/${prNumber}/comments?per_page=100`, _spawn)
+  for (const c of issueComments ?? []) {
+    if (!c.body?.trim()) continue
+    out.push({
+      id: crypto.randomUUID(),
+      author: c.user?.login ?? "unknown",
+      body: c.body,
+      created_at: c.created_at,
+      kind: "comment",
+      github_id: c.id,
+    })
+  }
+
+  // Reviews with a summary body (the "LGTM, but…" + decision)
+  const reviews = await ghJson<Array<{
+    id: number; user: { login: string } | null; body: string; state: string; submitted_at: string
+  }>>(repoDir, `/repos/${owner}/${name}/pulls/${prNumber}/reviews?per_page=100`, _spawn)
+  for (const r of reviews ?? []) {
+    if (!r.body?.trim()) continue
+    const stateMap: Record<string, import("./session").ConversationComment["state"]> = {
+      APPROVED: "APPROVED", CHANGES_REQUESTED: "CHANGES_REQUESTED",
+      COMMENTED: "COMMENTED", DISMISSED: "DISMISSED",
+    }
+    out.push({
+      id: crypto.randomUUID(),
+      author: r.user?.login ?? "unknown",
+      body: r.body,
+      created_at: r.submitted_at,
+      kind: "review_summary",
+      state: stateMap[r.state] ?? "COMMENTED",
+      github_id: r.id,
+    })
+  }
+
+  out.sort((a, b) => a.created_at.localeCompare(b.created_at))
+  return out
 }
 
 const RESOLVE_MUTATION = `
