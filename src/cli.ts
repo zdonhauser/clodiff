@@ -9,6 +9,11 @@ import { reanchorComments } from "./anchoring"
 import { startServer } from "./server"
 import { fetchPRInfo, fetchPRThreads, fetchPRConversation } from "./github"
 
+// Sentinel "to" endpoint meaning the working tree (uncommitted changes), as
+// opposed to a committed ref. `git diff <from>` (no second arg) compares the
+// working tree to <from>.
+export const WORKING_TREE = "WORKING"
+
 export interface CliArgs {
   base: string
   port: number
@@ -17,6 +22,7 @@ export interface CliArgs {
   patch?: string
   from?: string
   to?: string
+  working?: boolean
   pr?: number
 }
 
@@ -58,6 +64,8 @@ export function parseArgs(argv: string[]): CliArgs {
     } else if (arg === "--to") {
       args.to = nextValue(argv, i, "--to")
       i++
+    } else if (arg === "--working" || arg === "--uncommitted") {
+      args.working = true
     } else if (arg === "--pr") {
       const n = parseInt(nextValue(argv, i, "--pr"), 10)
       if (isNaN(n)) throw new Error("--pr must be a valid number")
@@ -102,11 +110,26 @@ function resolveRef(repoDir: string, ref: string): string {
 }
 
 function runGitDiff(repoDir: string, from: string, to: string): string {
-  const result = spawnSync("git", ["diff", from, to], {
-    cwd: repoDir,
-    encoding: "utf-8",
-    maxBuffer: 50 * 1024 * 1024,
-  })
+  const opts = { cwd: repoDir, encoding: "utf-8" as const, maxBuffer: 50 * 1024 * 1024 }
+
+  if (to === WORKING_TREE) {
+    // Uncommitted changes vs `from`: tracked changes (`git diff <from>`) plus
+    // untracked files rendered as new-file diffs. We use `git diff --no-index`
+    // per untracked file so the index is never modified.
+    const tracked = spawnSync("git", ["diff", from], opts)
+    if (tracked.error) throw tracked.error
+    let out = tracked.stdout
+    const untracked = spawnSync("git", ["ls-files", "--others", "--exclude-standard"], opts)
+      .stdout.split("\n").map((s) => s.trim()).filter(Boolean)
+    for (const file of untracked) {
+      // --no-index exits 1 when files differ (expected); stdout holds the diff.
+      const d = spawnSync("git", ["diff", "--no-index", "--", "/dev/null", file], opts)
+      if (d.stdout) out += d.stdout
+    }
+    return out
+  }
+
+  const result = spawnSync("git", ["diff", from, to], opts)
   if (result.error) throw result.error
   return result.stdout
 }
@@ -147,9 +170,10 @@ export async function main(): Promise<void> {
   let currentFrom: string | null = null
   let currentTo: string | null = null
 
-  // Auto-detect PR from current branch when no diff source is specified
+  // Auto-detect PR from current branch only when no diff source is specified.
+  // --working (and an explicit base/from/to) opt out of PR detection.
   let prInfo = null
-  if (!args.stdin && !args.patch && !args.from && !args.to && !args.base) {
+  if (!args.stdin && !args.patch && !args.from && !args.to && !args.base && !args.working) {
     prInfo = await fetchPRInfo(repoDir, args.pr)
     if (prInfo) {
       console.log(`clodiff: PR #${prInfo.number} detected — ${prInfo.title}`)
@@ -160,7 +184,12 @@ export async function main(): Promise<void> {
     }
   }
 
-  if (args.stdin) {
+  if (args.working) {
+    // Uncommitted changes vs a ref (default HEAD, or --base <ref>)
+    currentFrom = args.base || "HEAD"
+    currentTo = WORKING_TREE
+    diffText = runGitDiff(repoDir, currentFrom, WORKING_TREE)
+  } else if (args.stdin) {
     diffText = await readStdin()
   } else if (args.patch) {
     diffText = await readFile(args.patch, "utf-8")
@@ -172,16 +201,15 @@ export async function main(): Promise<void> {
     // Set by PR auto-detect above
     diffText = runGitDiff(repoDir, currentFrom, currentTo)
   } else if (args.base) {
+    // Working tree vs a base branch (includes uncommitted changes)
     currentFrom = args.base
-    currentTo = "HEAD"
-    const result = spawnSync("git", ["diff", args.base], {
-      cwd: repoDir,
-      encoding: "utf-8",
-    })
-    diffText = result.stdout
+    currentTo = WORKING_TREE
+    diffText = runGitDiff(repoDir, args.base, WORKING_TREE)
   } else {
-    // Browse mode: no diff, just show the repo
-    diffText = ""
+    // Default: uncommitted changes vs the last commit (the common case)
+    currentFrom = "HEAD"
+    currentTo = WORKING_TREE
+    diffText = runGitDiff(repoDir, "HEAD", WORKING_TREE)
   }
 
   // Mutable diff state — updated on /rediff
@@ -189,10 +217,12 @@ export async function main(): Promise<void> {
 
   // --- Load or create session ---
   const existingSession = await loadSession(repoDir)
-  // When diffing to a specific ref, use that ref's commit as the review's commit_id
-  // so GitHub PR reviews reference the correct commit on the feature branch.
-  const headCommit = currentTo
-    ? resolveRef(repoDir, currentTo)
+  // Use the target ref's commit as the review's commit_id so GitHub PR reviews
+  // reference the right commit. In working-tree mode `to` is a sentinel, so
+  // anchor to the `from` ref (e.g. HEAD) instead.
+  const commitRef = currentTo === WORKING_TREE ? currentFrom : currentTo
+  const headCommit = commitRef
+    ? resolveRef(repoDir, commitRef)
     : getHeadCommit(repoDir)
 
   let session: SessionFile

@@ -26,9 +26,11 @@ export function Header({ session, comments = [], fileCount, wsStatus, viewMode, 
     ? session.repo.split("/").pop()
     : "HEAD"
 
-  // _from/_to are injected by the server to track live rediff state
+  // _from/_to are injected by the server to track live rediff state. Keep the
+  // raw value (incl. the "WORKING" working-tree sentinel) for rediff round-trips;
+  // RefPicker renders "WORKING" as "working tree".
   const displayFrom = fromRef ?? session?._from ?? baseBranch
-  const displayTo = toRef ?? session?._to ?? "HEAD"
+  const displayTo = toRef ?? session?._to ?? "WORKING"
 
   const handleRediff = useCallback(async (newFrom, newTo) => {
     const f = newFrom ?? displayFrom

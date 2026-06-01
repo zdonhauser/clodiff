@@ -57,9 +57,13 @@ export function RefPicker({ value, label, onSelect }) {
       )
     : refs
 
-  // Add HEAD as first option for "compare" pickers
+  // Compare pickers lead with the working tree (uncommitted) and HEAD options.
   const allOptions = label === "compare"
-    ? [{ name: "HEAD", sha: "", subject: "Current working tree", date: "" }, ...filtered]
+    ? [
+        { name: "WORKING", sha: "", subject: "Uncommitted changes (working tree)", date: "" },
+        { name: "HEAD", sha: "", subject: "Last commit", date: "" },
+        ...filtered,
+      ]
     : filtered
 
   const isBase = label === "base"
@@ -84,7 +88,7 @@ export function RefPicker({ value, label, onSelect }) {
           gap: "4px",
         }}
       >
-        ${value}
+        ${value === "WORKING" ? "working tree" : value}
         <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor" style=${{ opacity: 0.6 }}>
           <path d="M0 2l4 4 4-4H0z"/>
         </svg>
@@ -169,7 +173,7 @@ export function RefPicker({ value, label, onSelect }) {
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
-                  }}>${ref.name}</span>
+                  }}>${ref.name === "WORKING" ? "working tree" : ref.name}</span>
                   ${ref.sha && html`
                     <span style=${{
                       fontFamily: "var(--font-mono)",

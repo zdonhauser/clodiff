@@ -46,10 +46,20 @@ bunx clodiff
 
 ## Usage
 
+### Uncommitted changes (the default)
+
+```bash
+clodiff                      # uncommitted changes vs the last commit
+                             # (tracked + untracked files) — unless the branch
+                             # has an open PR, in which case PR review wins
+clodiff --working            # force uncommitted-vs-HEAD even on a PR branch
+clodiff --working --base main   # uncommitted changes vs another branch
+```
+
 ### Local branch review
 
 ```bash
-clodiff --base main          # diff working tree against a branch
+clodiff --base main          # working tree (incl. uncommitted) vs a branch
 clodiff --from HEAD~3 --to HEAD   # specific commit range
 git diff HEAD~1 | clodiff --stdin # pipe a diff from any source
 clodiff --patch my.patch     # load a patch file
@@ -65,6 +75,10 @@ clodiff                      # on a PR branch — auto-detects the open PR,
 clodiff --pr 42              # explicit PR number (when not on the branch)
 ```
 
+You can also change the two diff endpoints live from the header (the **base ← compare**
+pickers, with a "working tree" option), or programmatically via `POST /rediff` — see
+[Server API](#server-api).
+
 The `--pr` flag (or auto-detection) enables the full PR review workflow:
 existing GitHub review comments are imported into the session so you can see
 what others have already said, and resolving threads is staged for GitHub sync
@@ -73,13 +87,14 @@ on submit.
 ### All flags
 
 ```
---base <branch>    Diff against a branch (local mode)
+--working          Uncommitted changes vs HEAD (or --base <ref>); tracked + untracked
+--base <branch>    Working tree vs a branch (local mode)
 --from <ref>       Start of range (requires --to)
 --to <ref>         End of range (requires --from)
 --pr <number>      Set PR number for GitHub submit/import
 --stdin            Read diff from stdin
 --patch <path>     Read diff from a patch file
---port <number>    Port to listen on (default: 7777)
+--port <number>    Port to listen on (default: 7777, auto-increments if taken)
 --resume           Resume existing session without warning
 ```
 
