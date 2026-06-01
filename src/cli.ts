@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 import { readFile } from "fs/promises"
 import { join, dirname } from "path"
 import { spawnSync } from "child_process"

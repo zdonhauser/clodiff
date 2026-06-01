@@ -15,15 +15,32 @@ A local code review viewer for Claude Code. Run it in any repo and Claude can na
 
 ## Installation
 
-Requires [Bun](https://bun.sh).
+clodiff runs on [Bun](https://bun.sh). Install Bun first if you don't have it:
 
 ```bash
-# Run without installing
-bunx clodiff
-
-# Install globally
-bun add -g clodiff
+# macOS / Linux / WSL
+curl -fsSL https://bun.sh/install | bash
+# Windows (PowerShell)
+powershell -c "irm bun.sh/install.ps1 | iex"
 ```
+
+(`which bun` should print a path afterwards; you may need to restart your shell so `~/.bun/bin` is on `PATH`.)
+
+Then install clodiff and run it:
+
+```bash
+bun add -g clodiff
+clodiff
+```
+
+Or run without installing:
+
+```bash
+bunx clodiff
+```
+
+> In sandboxed environments where `bunx`'s download-and-execute is blocked,
+> use the global install (`bun add -g clodiff`) and run the `clodiff` binary.
 
 ---
 
