@@ -389,6 +389,52 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
             })()
           }
 
+          // POST /triage-submit — own-PR triage: flush staged replies + resolves
+          // and optionally re-request review, WITHOUT submitting a review of your
+          // own PR. (You can't review your own PR; this is the author-side flush.)
+          if (url.pathname === "/triage-submit" && req.method === "POST") {
+            return req.json().then(async (reqBody: { request_rereview?: boolean }) => {
+              try {
+                const sessionPath = join(repoDir, ".review", "session.json")
+                if (!existsSync(sessionPath)) return new Response("No session found", { status: 404 })
+                const session = JSON.parse(readFileSync(sessionPath, "utf-8")) as SessionFile
+                const { checkAuth, postThreadReplies, resolveThreads, requestReReview } = await import("./github")
+                if (!await checkAuth()) return new Response("Not authenticated with GitHub", { status: 401 })
+                const prNumber = session.pr_number
+                if (!prNumber) return new Response("No open PR found", { status: 404 })
+
+                const replies = session.pending_replies ?? []
+                const resolves = session.pending_resolves ?? []
+                const repliesPosted = await postThreadReplies(repoDir, prNumber, replies)
+                if (resolves.length > 0) await resolveThreads(repoDir, resolves).catch(() => {})
+
+                let reReviewed = 0
+                if (reqBody.request_rereview) {
+                  const viewer = session.pr_meta?.viewer_login
+                  const logins = new Set<string>()
+                  for (const r of session.reviews || []) for (const c of r.comments || []) {
+                    if (c.author && c.author !== viewer) logins.add(c.author)
+                  }
+                  for (const c of session.pr_conversation || []) {
+                    if (c.author && c.author !== viewer) logins.add(c.author)
+                  }
+                  reReviewed = await requestReReview(repoDir, prNumber, [...logins]).catch(() => 0)
+                }
+
+                session.pending_replies = []
+                session.pending_resolves = []
+                session.updated_at = new Date().toISOString()
+                writeFileSync(sessionPath, JSON.stringify(session, null, 2))
+                return new Response(
+                  JSON.stringify({ repliesPosted, resolved: resolves.length, reReviewed }),
+                  { status: 200, headers: { "Content-Type": "application/json" } },
+                )
+              } catch (err: unknown) {
+                return new Response(err instanceof Error ? err.message : "Unknown error", { status: 500 })
+              }
+            }).catch(() => new Response("Invalid JSON", { status: 400 }))
+          }
+
           // GET /file — serve a file from repoDir (read-only)
           if (url.pathname === "/file" && req.method === "GET") {
             const filePath = url.searchParams.get("path")

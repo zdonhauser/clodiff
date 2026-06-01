@@ -8,6 +8,7 @@ import { scrollToLine } from "./utils/anchoring.js"
 import { Header } from "./components/Header.js"
 import { FileList } from "./components/FileList.js"
 import { Conversation } from "./components/Conversation.js"
+import { OutdatedComments } from "./components/OutdatedComments.js"
 import { FileSidebar } from "./components/FileSidebar.js"
 import { FileViewer } from "./components/FileViewer.js"
 import { CommentNavigator } from "./components/CommentNavigator.js"
@@ -419,6 +420,7 @@ function App() {
             ? html`<${FileViewer} path=${openFile.path} onClose=${() => setOpenFile(null)} />`
             : html`
               <${Conversation} prMeta=${session?.pr_meta} conversation=${session?.pr_conversation} />
+              <${OutdatedComments} comments=${comments} />
               <${FileList}
                 diff=${diff}
                 comments=${comments}

@@ -40,6 +40,33 @@ export function SubmitReviewModal({ comments = [], session, onClose, onSubmit })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(null)
 
+  // Own-PR triage: staged replies + resolves to flush, and the reviewers we'd
+  // re-request (everyone who commented except you).
+  const stagedReplies = (session?.pending_replies || []).length
+  const stagedResolves = (session?.pending_resolves || []).length
+  const viewerLogin = session?.pr_meta?.viewer_login
+  const reviewers = [...new Set([
+    ...comments.flatMap((c) => [c.author, ...(c.replies || []).map((r) => r.author)]),
+    ...(session?.pr_conversation || []).map((c) => c.author),
+  ].filter((a) => a && a !== viewerLogin))]
+  const [requestRereview, setRequestRereview] = useState(true)
+
+  const handleTriageSubmit = useCallback(async () => {
+    if (submitting) return
+    setSubmitting(true); setError(null)
+    try {
+      const res = await fetch("/triage-submit", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ request_rereview: requestRereview && reviewers.length > 0 }),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      onClose?.()
+    } catch (err) {
+      setError(err.message || "Triage submit failed")
+      setSubmitting(false)
+    }
+  }, [submitting, requestRereview, reviewers.length, onClose])
+
   const unresolved = comments.filter((c) => !c.resolved && !c.is_outdated)
   const counts = unresolved.reduce((acc, c) => {
     const sev = c.severity || "note"
@@ -109,7 +136,7 @@ export function SubmitReviewModal({ comments = [], session, onClose, onSubmit })
           flexShrink: 0,
         }}>
           <h2 style=${{ margin: 0, fontSize: "16px", fontWeight: "600", color: "var(--color-fg-default)" }}>
-            Submit Review
+            ${isOwnPR ? "Triage your PR" : "Submit Review"}
           </h2>
           <button
             onClick=${onClose}
@@ -124,6 +151,30 @@ export function SubmitReviewModal({ comments = [], session, onClose, onSubmit })
         <!-- Body -->
         <div style=${{ padding: "20px", flex: 1, overflow: "auto" }}>
 
+          ${isOwnPR ? html`
+            <!-- ── Own-PR triage ── -->
+            <div style=${{
+              padding: "12px 14px", background: "var(--color-canvas-subtle)",
+              border: "1px solid var(--color-border-default)", borderRadius: "var(--radius-md)",
+              marginBottom: "16px", fontSize: "13px", color: "var(--color-fg-default)", lineHeight: "1.6",
+            }}>
+              You're triaging your own PR — this posts your staged replies and resolves the
+              threads you marked, <strong>without</strong> submitting a review.
+              <div style=${{ marginTop: "10px", display: "flex", gap: "16px", flexWrap: "wrap" }}>
+                <span style=${{ color: stagedReplies ? "var(--color-accent-fg)" : "var(--color-fg-muted)", fontWeight: "500" }}>${stagedReplies} repl${stagedReplies === 1 ? "y" : "ies"} to post</span>
+                <span style=${{ color: stagedResolves ? "var(--color-success-fg)" : "var(--color-fg-muted)", fontWeight: "500" }}>${stagedResolves} thread${stagedResolves === 1 ? "" : "s"} to resolve</span>
+              </div>
+            </div>
+            ${reviewers.length > 0 && html`
+              <label style=${{ display: "flex", alignItems: "flex-start", gap: "10px", padding: "10px 12px", border: "1px solid var(--color-border-default)", borderRadius: "var(--radius-sm)", cursor: "pointer" }}>
+                <input type="checkbox" checked=${requestRereview} onChange=${(e) => setRequestRereview(e.target.checked)} style=${{ marginTop: "2px", flexShrink: 0, accentColor: "var(--color-accent-emphasis)" }} />
+                <div>
+                  <div style=${{ fontSize: "13px", fontWeight: "600", color: "var(--color-fg-default)" }}>Request re-review</div>
+                  <div style=${{ fontSize: "12px", color: "var(--color-fg-muted)", marginTop: "2px" }}>Re-request ${reviewers.map((r) => "@" + r).join(", ")}</div>
+                </div>
+              </label>
+            `}
+          ` : html`
           <!-- Staged comments summary -->
           ${unresolved.length > 0 ? html`
             <div style=${{
@@ -233,6 +284,7 @@ export function SubmitReviewModal({ comments = [], session, onClose, onSubmit })
               })}
             </div>
           </div>
+          `}
 
           ${error && html`
             <div style=${{
@@ -263,11 +315,11 @@ export function SubmitReviewModal({ comments = [], session, onClose, onSubmit })
             }}
           >Cancel</button>
           <button
-            onClick=${handleSubmit}
+            onClick=${isOwnPR ? handleTriageSubmit : handleSubmit}
             disabled=${submitting}
             style=${{
               padding: "6px 16px",
-              background: submitting ? "var(--color-canvas-subtle)" : EVENT_COLORS[event] || "var(--color-accent-emphasis)",
+              background: submitting ? "var(--color-canvas-subtle)" : (isOwnPR ? "var(--color-accent-emphasis)" : EVENT_COLORS[event] || "var(--color-accent-emphasis)"),
               border: "none",
               borderRadius: "var(--radius-sm)",
               color: submitting ? "var(--color-fg-muted)" : "#ffffff",
@@ -275,7 +327,7 @@ export function SubmitReviewModal({ comments = [], session, onClose, onSubmit })
               cursor: submitting ? "not-allowed" : "pointer",
               fontWeight: "600",
             }}
-          >${submitting ? "Submitting…" : "Submit Review"}</button>
+          >${submitting ? "Working…" : (isOwnPR ? "Post replies & resolve" : "Submit Review")}</button>
         </div>
       </div>
     </div>

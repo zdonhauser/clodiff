@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { checkAuth, findOpenPR, buildReviewPayload, pushReview, fetchPRInfo, fetchPRThreads, resolveThreads, postThreadReplies } from "../github"
+import { checkAuth, findOpenPR, buildReviewPayload, pushReview, fetchPRInfo, fetchPRThreads, resolveThreads, postThreadReplies, requestReReview } from "../github"
 import type { Review, ReviewComment } from "../session"
 
 type SpawnResult = {
@@ -429,5 +429,25 @@ describe("postThreadReplies", () => {
   it("returns 0 when there are no replies", async () => {
     const { spawn } = makeSpawn([])
     expect(await postThreadReplies("/repo", 7, [], spawn)).toBe(0)
+  })
+})
+
+describe("requestReReview", () => {
+  it("re-requests the given reviewers and returns the count", async () => {
+    const { spawn, calls } = makeSpawn([
+      { exitCode: 0, stdout: JSON.stringify({ owner: { login: "z" }, name: "repo" }) },
+      { exitCode: 0, stdout: "{}" },
+    ])
+    const n = await requestReReview("/repo", 9, ["alice", "bob"], spawn)
+    expect(n).toBe(2)
+    const post = calls.find((c) => c.argv.includes("--method"))!
+    expect(post.argv.join(" ")).toContain("/pulls/9/requested_reviewers")
+    const payload = JSON.parse(Buffer.from((post.opts as { stdin: Buffer }).stdin).toString())
+    expect(payload.reviewers).toEqual(["alice", "bob"])
+  })
+
+  it("returns 0 with no reviewers", async () => {
+    const { spawn } = makeSpawn([])
+    expect(await requestReReview("/repo", 9, [], spawn)).toBe(0)
   })
 })

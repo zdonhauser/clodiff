@@ -171,6 +171,7 @@ interface RestReviewComment {
   side: "LEFT" | "RIGHT" | null
   subject_type?: "line" | "file"
   in_reply_to_id?: number
+  diff_hunk?: string
   created_at: string
 }
 
@@ -286,6 +287,8 @@ export async function fetchPRThreads(
     }
     if (c.start_line != null) rc.start_line = c.start_line
     if (c.start_side != null) rc.start_side = c.start_side
+    if (c.original_line != null) rc.original_line = c.original_line
+    if (c.diff_hunk) rc.diff_hunk = c.diff_hunk
     if (meta?.threadId) rc.github_thread_id = meta.threadId
     return rc
   }
@@ -503,4 +506,31 @@ export async function postThreadReplies(
     if (proc.exitCode === 0) posted++
   }
   return posted
+}
+
+// Re-request review from the given logins (the reviewers who left comments).
+// Used when triaging your own PR — "I've addressed everything, please look again".
+// Returns the number of reviewers re-requested (0 on failure).
+export async function requestReReview(
+  repoDir: string,
+  prNumber: number,
+  reviewers: string[],
+  _spawn: typeof Bun.spawn = Bun.spawn,
+): Promise<number> {
+  if (!reviewers || reviewers.length === 0) return 0
+  let owner: string, repo: string
+  try {
+    const r = await getRepoOwnerName(repoDir, _spawn)
+    owner = r.owner
+    repo = r.name
+  } catch {
+    return 0
+  }
+  const payload = JSON.stringify({ reviewers })
+  const proc = _spawn(
+    ["gh", "api", "--method", "POST", `/repos/${owner}/${repo}/pulls/${prNumber}/requested_reviewers`, "--input", "-"],
+    { stdout: "pipe", stderr: "pipe", stdin: Buffer.from(payload) },
+  )
+  await proc.exited
+  return proc.exitCode === 0 ? reviewers.length : 0
 }

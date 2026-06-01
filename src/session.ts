@@ -15,6 +15,7 @@ export interface ReviewComment {
 
   // GitHub import fields (set when comment was fetched from GitHub)
   author?: string          // GitHub login of the commenter (imported comments only)
+  diff_hunk?: string       // the unified-diff context the comment was made on (for outdated comments)
   github_id?: number       // REST API databaseId — used to deduplicate imports
   github_thread_id?: string // GraphQL PRRT_xxx node ID — used for staged resolves
 
