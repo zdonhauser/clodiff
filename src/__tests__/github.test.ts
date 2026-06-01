@@ -243,79 +243,73 @@ describe("fetchPRInfo", () => {
 })
 
 describe("fetchPRThreads", () => {
-  function makeGraphQLResponse(threads: unknown[]) {
-    return JSON.stringify({
-      data: {
-        repository: {
-          pullRequest: {
-            reviewThreads: { nodes: threads }
-          }
-        }
-      }
-    })
+  // Spawn order: getRepoOwnerName → REST comments → GraphQL threads.
+  const repoView = { exitCode: 0, stdout: JSON.stringify({ owner: { login: "z" }, name: "repo" }) }
+  function graphql(threads: unknown[]) {
+    return JSON.stringify({ data: { repository: { pullRequest: { reviewThreads: { nodes: threads } } } } })
+  }
+  function restComment(o: Record<string, unknown>) {
+    return {
+      id: 0, user: { login: "alice" }, body: "", path: "a.ts",
+      line: 1, original_line: 1, start_line: null, start_side: null, side: "RIGHT",
+      subject_type: "line", created_at: "2026-01-01T00:00:00Z", ...o,
+    }
   }
 
-  it("maps review threads to ReviewComment[]", async () => {
-    const gql = makeGraphQLResponse([{
-      id: "PRRT_abc",
-      isResolved: false,
-      comments: { nodes: [{
-        databaseId: 999,
-        body: "Use async/await",
-        path: "src/foo.ts",
-        line: 10,
-        originalLine: 10,
-        author: { login: "alice" },
-        createdAt: "2026-01-01T00:00:00Z",
-        outdated: false,
-      }] }
-    }])
-    const { spawn } = makeSpawn([
-      { exitCode: 0, stdout: JSON.stringify({ owner: { login: "z" }, name: "repo" }) },
-      { exitCode: 0, stdout: gql },
-    ])
+  it("maps review comments to ReviewComment[] with author and side", async () => {
+    const rest = [restComment({ id: 999, user: { login: "alice" }, body: "Use async/await", path: "src/foo.ts", line: 10 })]
+    const gql = graphql([{ id: "PRRT_abc", isResolved: false, comments: { nodes: [{ fullDatabaseId: "999", outdated: false }] } }])
+    const { spawn } = makeSpawn([repoView, { exitCode: 0, stdout: JSON.stringify(rest) }, { exitCode: 0, stdout: gql }])
     const threads = await fetchPRThreads("/repo", 1, "deadbeef", spawn)
     expect(threads).toHaveLength(1)
     const c = threads[0]
     expect(c.body).toBe("Use async/await")
     expect(c.path).toBe("src/foo.ts")
     expect(c.line).toBe(10)
+    expect(c.author).toBe("alice")
+    expect(c.side).toBe("RIGHT")
     expect(c.source).toBe("user")
     expect(c.github_id).toBe(999)
     expect(c.github_thread_id).toBe("PRRT_abc")
     expect(c.resolved).toBe(false)
-    expect(c.is_outdated).toBe(false)
     expect(c.commit_id).toBe("deadbeef")
   })
 
   it("marks already-resolved threads as resolved", async () => {
-    const gql = makeGraphQLResponse([{
-      id: "PRRT_xyz",
-      isResolved: true,
-      comments: { nodes: [{
-        databaseId: 1,
-        body: "fixed",
-        path: "a.ts",
-        line: 1,
-        originalLine: 1,
-        author: { login: "bob" },
-        createdAt: "2026-01-01T00:00:00Z",
-        outdated: false,
-      }] }
-    }])
-    const { spawn } = makeSpawn([
-      { exitCode: 0, stdout: JSON.stringify({ owner: { login: "z" }, name: "r" }) },
-      { exitCode: 0, stdout: gql },
-    ])
+    const rest = [restComment({ id: 1, user: { login: "bob" }, body: "fixed" })]
+    const gql = graphql([{ id: "PRRT_xyz", isResolved: true, comments: { nodes: [{ fullDatabaseId: "1", outdated: false }] } }])
+    const { spawn } = makeSpawn([repoView, { exitCode: 0, stdout: JSON.stringify(rest) }, { exitCode: 0, stdout: gql }])
     const threads = await fetchPRThreads("/repo", 1, "abc", spawn)
     expect(threads[0].resolved).toBe(true)
   })
 
-  it("returns empty array when graphql fails", async () => {
-    const { spawn } = makeSpawn([
-      { exitCode: 0, stdout: JSON.stringify({ owner: { login: "z" }, name: "r" }) },
-      { exitCode: 1, stderr: "not found" },
-    ])
+  it("groups replies under their root comment with authors", async () => {
+    const rest = [
+      restComment({ id: 10, user: { login: "alice" }, body: "please rename", line: 5 }),
+      restComment({ id: 11, user: { login: "bob" }, body: "done", line: 5, in_reply_to_id: 10, created_at: "2026-01-01T01:00:00Z" }),
+    ]
+    const gql = graphql([{ id: "PRRT_1", isResolved: false, comments: { nodes: [{ fullDatabaseId: "10", outdated: false }, { fullDatabaseId: "11", outdated: false }] } }])
+    const { spawn } = makeSpawn([repoView, { exitCode: 0, stdout: JSON.stringify(rest) }, { exitCode: 0, stdout: gql }])
+    const threads = await fetchPRThreads("/repo", 1, "abc", spawn)
+    expect(threads).toHaveLength(1)
+    expect(threads[0].author).toBe("alice")
+    expect(threads[0].replies).toHaveLength(1)
+    expect(threads[0].replies![0].author).toBe("bob")
+    expect(threads[0].replies![0].body).toBe("done")
+  })
+
+  it("captures LEFT side and multi-line range", async () => {
+    const rest = [restComment({ id: 7, body: "deleted line issue", line: 20, start_line: 18, start_side: "LEFT", side: "LEFT" })]
+    const gql = graphql([{ id: "PRRT_2", isResolved: false, comments: { nodes: [{ fullDatabaseId: "7", outdated: false }] } }])
+    const { spawn } = makeSpawn([repoView, { exitCode: 0, stdout: JSON.stringify(rest) }, { exitCode: 0, stdout: gql }])
+    const threads = await fetchPRThreads("/repo", 1, "abc", spawn)
+    expect(threads[0].side).toBe("LEFT")
+    expect(threads[0].start_line).toBe(18)
+    expect(threads[0].start_side).toBe("LEFT")
+  })
+
+  it("returns empty array when there are no review comments", async () => {
+    const { spawn } = makeSpawn([repoView, { exitCode: 0, stdout: "[]" }])
     const threads = await fetchPRThreads("/repo", 1, "abc", spawn)
     expect(threads).toEqual([])
   })

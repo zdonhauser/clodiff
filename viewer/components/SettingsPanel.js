@@ -16,7 +16,7 @@ const TEXT_SIZES = [
  *   textSize          — "sm" | "md" | "lg"
  *   onTextSizeChange  — (s: string) => void
  */
-export function SettingsPanel({ allFilesMode, onAllFilesChange, textSize, onTextSizeChange }) {
+export function SettingsPanel({ allFilesMode, onAllFilesChange, textSize, onTextSizeChange, wrap, onWrapChange }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
@@ -78,6 +78,20 @@ export function SettingsPanel({ allFilesMode, onAllFilesChange, textSize, onText
               type="checkbox"
               checked=${allFilesMode}
               onChange=${(e) => onAllFilesChange?.(e.target.checked)}
+              style=${{ cursor: "pointer", flexShrink: 0, accentColor: "var(--color-accent-emphasis)" }}
+            />
+          </label>
+
+          <!-- Wrap long lines -->
+          <label style=${{ ...row, cursor: "pointer", gap: "8px" }}>
+            <div>
+              <div style=${label}>Wrap long lines</div>
+              <div style=${muted}>Wrap instead of scrolling horizontally</div>
+            </div>
+            <input
+              type="checkbox"
+              checked=${wrap}
+              onChange=${(e) => onWrapChange?.(e.target.checked)}
               style=${{ cursor: "pointer", flexShrink: 0, accentColor: "var(--color-accent-emphasis)" }}
             />
           </label>

@@ -7,7 +7,7 @@ import DOMPurify from "https://esm.sh/dompurify@3"
 // GitHub-flavored markdown, XSS-safe via DOMPurify
 marked.setOptions({ gfm: true, breaks: true })
 
-function MarkdownBody({ text, style = {} }) {
+export function MarkdownBody({ text, style = {} }) {
   const ref = useRef(null)
   useEffect(() => {
     if (ref.current) {
@@ -74,7 +74,7 @@ const SEVERITY_BG = {
   note: "#6e77811a",
 }
 
-function Avatar({ label }) {
+export function Avatar({ label }) {
   const initial = label ? label[0].toUpperCase() : "?"
   return html`
     <div style=${{
@@ -132,17 +132,20 @@ function OutdatedBadge() {
   `
 }
 
-function SourceLabel({ source }) {
+function SourceLabel({ source, author }) {
+  // Imported GitHub comments carry the real commenter's login — show it instead
+  // of the generic "You", which only applies to comments you write locally.
   const labels = {
     "claude-code": "Claude Code",
     "user": "You",
   }
+  const text = author ? `@${author}` : (labels[source] || source || "Unknown")
   return html`
     <span style=${{
       fontSize: "13px",
       fontWeight: "600",
       color: "var(--color-fg-default)",
-    }}>${labels[source] || source || "Unknown"}</span>
+    }}>${text}</span>
   `
 }
 
@@ -221,9 +224,9 @@ export function CommentCard({ comment, onReply, onResolve, onAction, getNavInfo,
         borderBottom: "1px solid var(--color-border-muted)",
         background: "var(--color-canvas-subtle)",
       }}>
-        <${Avatar} label=${comment.source} />
+        <${Avatar} label=${comment.author || comment.source} />
         <div style=${{ display: "flex", alignItems: "center", gap: "6px", flex: 1, flexWrap: "wrap" }}>
-          <${SourceLabel} source=${comment.source} />
+          <${SourceLabel} source=${comment.source} author=${comment.author} />
           ${comment.severity && html`<${SeverityBadge} severity=${comment.severity} />`}
           ${comment.is_outdated && html`<${OutdatedBadge} />`}
           ${comment.resolved && html`
@@ -377,10 +380,10 @@ export function CommentCard({ comment, onReply, onResolve, onAction, getNavInfo,
                 borderBottom: i < comment.replies.length - 1 ? "1px solid var(--color-border-muted)" : "none",
               }}>
                 <div style=${{ display: "flex", gap: "8px", alignItems: "flex-start" }}>
-                  <${Avatar} label=${reply.source || "user"} />
+                  <${Avatar} label=${reply.author || reply.source || "user"} />
                   <div style=${{ flex: 1 }}>
                     <div style=${{ display: "flex", gap: "6px", alignItems: "center", marginBottom: "4px" }}>
-                      <${SourceLabel} source=${reply.source || "user"} />
+                      <${SourceLabel} source=${reply.source || "user"} author=${reply.author} />
                       ${reply.created_at && html`
                         <span style=${{
                           fontSize: "12px",

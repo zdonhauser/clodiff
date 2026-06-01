@@ -7,6 +7,7 @@ import { scrollToLine } from "./utils/anchoring.js"
 
 import { Header } from "./components/Header.js"
 import { FileList } from "./components/FileList.js"
+import { Conversation } from "./components/Conversation.js"
 import { FileSidebar } from "./components/FileSidebar.js"
 import { FileViewer } from "./components/FileViewer.js"
 import { CommentNavigator } from "./components/CommentNavigator.js"
@@ -59,6 +60,9 @@ function App() {
   })
   const [textSize, setTextSize] = useState(() => {
     try { return localStorage.getItem("clodiff_textSize") || "md" } catch { return "md" }
+  })
+  const [wrap, setWrap] = useState(() => {
+    try { return localStorage.getItem("clodiff_wrap") !== "off" } catch { return true }
   })
   const [openFile, setOpenFile] = useState(null) // { path, isDiff } for non-diff file panel
   const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" ? window.innerWidth < 768 : false)
@@ -278,9 +282,16 @@ function App() {
     document.documentElement.setAttribute("data-text-size", size)
   }, [])
 
-  // Apply stored text size on mount
+  const handleWrapChange = useCallback((on) => {
+    setWrap(on)
+    try { localStorage.setItem("clodiff_wrap", on ? "on" : "off") } catch {}
+    document.documentElement.setAttribute("data-wrap", on ? "on" : "off")
+  }, [])
+
+  // Apply stored text size + wrap on mount
   useEffect(() => {
     document.documentElement.setAttribute("data-text-size", textSize)
+    document.documentElement.setAttribute("data-wrap", wrap ? "on" : "off")
   }, [])
 
   // Track mobile breakpoint
@@ -400,11 +411,15 @@ function App() {
           onAllFilesChange=${handleAllFilesChange}
           textSize=${textSize}
           onTextSizeChange=${handleTextSizeChange}
+          wrap=${wrap}
+          onWrapChange=${handleWrapChange}
         />
         <main style=${{ flex: 1, overflow: "auto", minWidth: 0 }}>
           ${openFile
             ? html`<${FileViewer} path=${openFile.path} onClose=${() => setOpenFile(null)} />`
-            : html`<${FileList}
+            : html`
+              <${Conversation} prMeta=${session?.pr_meta} conversation=${session?.pr_conversation} />
+              <${FileList}
                 diff=${diff}
                 comments=${comments}
                 expandedFiles=${expandedFiles}

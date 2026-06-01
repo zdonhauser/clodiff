@@ -163,6 +163,15 @@
       [data-text-size="lg"] { --font-code-size: 14px; }
     }
 
+    /* Line wrapping on desktop — toggled in Settings (data-wrap on the <html>).
+       Mobile always wraps via the max-width:768px block below regardless. */
+    [data-wrap="on"] .diff-line-content {
+      white-space: pre-wrap !important;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    [data-wrap="on"] [data-hunk] { overflow-x: visible; }
+
     /* Button base — all buttons inherit font, transition */
     button {
       font-family: var(--font-ui);
