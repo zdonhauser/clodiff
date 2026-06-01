@@ -127,6 +127,13 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
                         line: parent.line,
                         side: parent.side,
                       })
+                      // Replying to an imported GitHub thread → stage a threaded
+                      // reply to post on submit (the parent's github_id is the
+                      // REST comment id that in_reply_to expects).
+                      if (parent.github_id !== undefined) {
+                        if (!session.pending_replies) session.pending_replies = []
+                        session.pending_replies.push({ in_reply_to: parent.github_id, body: body.body })
+                      }
                       session.updated_at = replyCreatedAt
                       writeFileSync(sessionFilePath, JSON.stringify(session, null, 2))
                       for (const client of wsClients) {
@@ -356,13 +363,22 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
                 }
                 const review = session.reviews[session.reviews.length - 1]
                 await pushReview(repoDir, prNumber, buildReviewPayload(review))
-                // Resolve any staged GitHub threads (best-effort, don't fail the push)
-                const { resolveThreads } = await import("./github")
+                // Flush staged GitHub side-effects (best-effort, don't fail the push)
+                const { resolveThreads, postThreadReplies } = await import("./github")
+                let mutated = false
                 const pendingResolves = session.pending_resolves ?? []
                 if (pendingResolves.length > 0) {
                   await resolveThreads(repoDir, pendingResolves).catch(() => {})
-                  // Clear pending resolves after successful attempt
                   session.pending_resolves = []
+                  mutated = true
+                }
+                const pendingReplies = session.pending_replies ?? []
+                if (pendingReplies.length > 0) {
+                  await postThreadReplies(repoDir, prNumber, pendingReplies).catch(() => {})
+                  session.pending_replies = []
+                  mutated = true
+                }
+                if (mutated) {
                   session.updated_at = new Date().toISOString()
                   writeFileSync(sessionPath, JSON.stringify(session, null, 2))
                 }
