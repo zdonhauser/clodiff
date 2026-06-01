@@ -166,6 +166,23 @@ export async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2))
   const repoDir = process.cwd()
 
+  // If a clodiff is already serving this repo, reuse it instead of starting a
+  // second server (which would pop another browser window). The running session
+  // hot-reloads on changes, so re-running is rarely needed anyway.
+  if (!args.stdin) {
+    const prior = await loadSession(repoDir)
+    if (prior?.port) {
+      const alive = await fetch(`http://localhost:${prior.port}/session`, { signal: AbortSignal.timeout(600) })
+        .then((r) => r.ok).catch(() => false)
+      if (alive) {
+        const url = `http://localhost:${prior.port}`
+        console.log(`clodiff: already running at ${url} — reusing it (it hot-reloads on changes)`)
+        openBrowser(url)
+        return
+      }
+    }
+  }
+
   // --- Determine diff text ---
   let diffText: string
   let currentFrom: string | null = null
@@ -299,12 +316,21 @@ export async function main(): Promise<void> {
     session.current_commit = headCommit
   }
 
+  // Recompute the diff for ref-based modes so the viewer always reflects the
+  // latest working tree (hot reload). stdin/patch diffs are static (from/to null).
+  const refreshDiff = () => {
+    if (diffState.from !== null && diffState.to !== null) {
+      try { diffState.parsed = parseDiff(runGitDiff(repoDir, diffState.from, diffState.to)) } catch { /* keep last good diff */ }
+    }
+  }
+
   // Start the server
   const { port, server: _server } = await startServer({
     port: args.port,
     repoDir,
     viewerDir: join(import.meta.dirname, "..", "viewer"),
     getInitPayload: async () => {
+      refreshDiff()
       const freshSession = (await loadSession(repoDir)) ?? session
       return {
         type: "init",

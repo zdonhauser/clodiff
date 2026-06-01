@@ -623,21 +623,49 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
   // Listen, auto-incrementing the port if taken.
   const port = await listenWithRetry(server, options.port, 10)
 
-  // Watch the clodiff session dir for session.json changes and broadcast to WS clients
+  const broadcast = (msg: unknown) => {
+    const text = JSON.stringify(msg)
+    for (const client of wsClients) {
+      try { client.send(text) } catch { /* client may have disconnected */ }
+    }
+  }
+
+  // Watch the clodiff session dir for session.json changes (annotations) and
+  // broadcast to WS clients.
   const watchDir = reviewDir(repoDir)
   mkdirSync(watchDir, { recursive: true })
-  watch(watchDir, { persistent: false }, (event, filename) => {
-    if (filename === "session.json") {
-      const msg = JSON.stringify({ type: "session_update", timestamp: Date.now() })
-      for (const client of wsClients) {
-        try {
-          client.send(msg)
-        } catch {
-          // Client may have disconnected
-        }
-      }
-    }
+  watch(watchDir, { persistent: false }, (_event, filename) => {
+    if (filename === "session.json") broadcast({ type: "session_update", timestamp: Date.now() })
   })
+
+  // Hot reload: when the working tree (or HEAD/index) changes, recompute the diff
+  // (getInitPayload re-runs it) and push a fresh init to the open viewer — so you
+  // never need to relaunch clodiff to see new changes. Debounced; .git internals
+  // and node_modules are ignored.
+  let refreshTimer: NodeJS.Timeout | null = null
+  const scheduleRefresh = () => {
+    if (!getInitPayload) return
+    if (refreshTimer) clearTimeout(refreshTimer)
+    refreshTimer = setTimeout(async () => {
+      try { broadcast(await Promise.resolve(getInitPayload())) } catch { /* ignore transient diff errors */ }
+    }, 400)
+  }
+  try {
+    watch(repoDir, { persistent: false, recursive: true }, (_event, filename) => {
+      if (!filename) return
+      const f = filename.toString()
+      if (f === ".git" || f.startsWith(".git/") || f.startsWith(".git" + path.sep) || f.includes("node_modules")) return
+      scheduleRefresh()
+    })
+  } catch { /* recursive watch unsupported on this platform — skip working-tree hot reload */ }
+  // Catch commits / staging / checkouts (HEAD & index live in the git dir).
+  try {
+    const gitDir = path.dirname(watchDir)
+    watch(gitDir, { persistent: false }, (_event, filename) => {
+      const f = (filename || "").toString()
+      if (f === "HEAD" || f === "index" || f === "ORIG_HEAD") scheduleRefresh()
+    })
+  } catch { /* ignore */ }
 
   return { port, server }
 }
