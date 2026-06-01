@@ -165,15 +165,20 @@ Install the **clodiff plugin** from [clogins](https://github.com/zdonhauser/clog
 /plugin install clodiff@clogins
 ```
 
-This installs two skills and two hooks:
+This installs two skills and three hooks:
 
 - **`clodiff` skill** — teaches Claude to start clodiff, navigate the viewer,
   highlight lines, and leave inline annotations during any code discussion
-- **`clodiff-review` skill** — full code review workflow: auto-detects PR vs
-  local mode, annotates file by file, sets the review outcome, monitors for
-  replies, and responds in-thread
+- **`clodiff-review` skill** — the viewer/UI layer for code review: reviews a
+  PR or local changes when no other engine is named, or displays findings that
+  already exist, as inline annotations staged for a GitHub PR review
 - **`inject-replies` hook** — injects pending viewer replies into every prompt
   so you can reply to annotations without leaving the viewer
+- **`nudge-review` hook** — when a clodiff session is live and your prompt looks
+  like a review (including ones that name another engine, e.g. a security review
+  or `ultrareview`), reminds Claude to render the findings as annotations in the
+  viewer — so any review flow surfaces in clodiff without it overriding the
+  engine you asked for
 - **`load-session` hook** — loads clodiff session state at startup so Claude
   is always aware of an active session
 
