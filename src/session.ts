@@ -71,6 +71,7 @@ export interface SessionFile {
   pr_number?: number
   pr_meta?: PRMeta
   pending_resolves?: string[] // github_thread_ids to resolve on next submit
+  pending_replies?: Array<{ in_reply_to: number; body: string }> // threaded replies to post on submit
   reviews: Review[]
   created_at: string
   updated_at: string

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test"
-import { checkAuth, findOpenPR, buildReviewPayload, pushReview, fetchPRInfo, fetchPRThreads, resolveThreads } from "../github"
+import { checkAuth, findOpenPR, buildReviewPayload, pushReview, fetchPRInfo, fetchPRThreads, resolveThreads, postThreadReplies } from "../github"
 import type { Review, ReviewComment } from "../session"
 
 type SpawnResult = {
@@ -387,5 +387,32 @@ describe("pushReview", () => {
     const body = JSON.parse(stdinBuf.toString())
     expect(body.event).toBe("APPROVE")
     expect(body.commit_id).toBe("abc123")
+  })
+})
+
+describe("postThreadReplies", () => {
+  it("posts each reply with in_reply_to and returns the count", async () => {
+    const { spawn, calls } = makeSpawn([
+      { exitCode: 0, stdout: JSON.stringify({ owner: { login: "z" }, name: "repo" }) },
+      { exitCode: 0, stdout: "{}" },
+      { exitCode: 0, stdout: "{}" },
+    ])
+    const posted = await postThreadReplies("/repo", 7, [
+      { in_reply_to: 100, body: "done" },
+      { in_reply_to: 101, body: "good point" },
+    ], spawn)
+    expect(posted).toBe(2)
+    const postCalls = calls.filter((c) => c.argv.includes("--method"))
+    expect(postCalls).toHaveLength(2)
+    expect(postCalls[0].argv.join(" ")).toContain("/pulls/7/comments")
+    const stdin = (postCalls[0].opts as { stdin: Buffer }).stdin
+    const payload = JSON.parse(Buffer.from(stdin).toString())
+    expect(payload.in_reply_to).toBe(100)
+    expect(payload.body).toBe("done")
+  })
+
+  it("returns 0 when there are no replies", async () => {
+    const { spawn } = makeSpawn([])
+    expect(await postThreadReplies("/repo", 7, [], spawn)).toBe(0)
   })
 })

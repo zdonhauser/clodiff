@@ -454,3 +454,35 @@ export async function pushReview(
     throw new Error(`gh api failed (exit ${apiProc.exitCode}): ${err}`)
   }
 }
+
+// Post threaded replies to existing review comments. The reviews endpoint can't
+// thread, so each reply goes to /pulls/{n}/comments with in_reply_to. Best-effort
+// per reply; returns the count posted.
+export async function postThreadReplies(
+  repoDir: string,
+  prNumber: number,
+  replies: Array<{ in_reply_to: number; body: string }>,
+  _spawn: typeof Bun.spawn = Bun.spawn,
+): Promise<number> {
+  if (!replies || replies.length === 0) return 0
+  let owner: string, repo: string
+  try {
+    const r = await getRepoOwnerName(repoDir, _spawn)
+    owner = r.owner
+    repo = r.name
+  } catch {
+    return 0
+  }
+  const endpoint = `/repos/${owner}/${repo}/pulls/${prNumber}/comments`
+  let posted = 0
+  for (const reply of replies) {
+    const body = JSON.stringify({ body: reply.body, in_reply_to: reply.in_reply_to })
+    const proc = _spawn(
+      ["gh", "api", "--method", "POST", endpoint, "--input", "-"],
+      { stdout: "pipe", stderr: "pipe", stdin: Buffer.from(body) },
+    )
+    await proc.exited
+    if (proc.exitCode === 0) posted++
+  }
+  return posted
+}
