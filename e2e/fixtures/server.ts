@@ -59,7 +59,8 @@ export const test = base.extend<{ server: ServerContext }>({
   server: [
     async ({}, use) => {
       const repoDir = createTestRepo()
-      const reviewDir = join(repoDir, ".review")
+      // clodiff stores state under the git dir now (see session.ts reviewDir).
+      const reviewDir = join(repoDir, ".git", "clodiff")
       const sessionPath = join(reviewDir, "session.json")
       const repliesPath = join(reviewDir, "replies.json")
 
