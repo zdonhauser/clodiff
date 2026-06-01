@@ -141,10 +141,11 @@ export async function fetchPRInfo(
 // Thread structure + resolve state come from GraphQL (REST doesn't expose them);
 // per-comment side/range/author/reply-links come from REST (GraphQL has no `side`).
 const PR_THREADS_QUERY = `
-query GetPRThreads($owner: String!, $repo: String!, $number: Int!) {
+query GetPRThreads($owner: String!, $repo: String!, $number: Int!, $cursor: String) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $number) {
-      reviewThreads(first: 100) {
+      reviewThreads(first: 100, after: $cursor) {
+        pageInfo { hasNextPage endCursor }
         nodes {
           id
           isResolved
@@ -173,20 +174,24 @@ interface RestReviewComment {
   created_at: string
 }
 
-async function ghJson<T>(
+// Fetch ALL pages of a list endpoint via `gh --paginate --slurp` (no 100-item
+// cap). --slurp returns an array of pages; flat() merges them. flat() also
+// tolerates a plain single-page array, which keeps the mocks simple.
+async function ghPaginated<T>(
   repoDir: string,
   endpoint: string,
   _spawn: typeof Bun.spawn,
-): Promise<T | null> {
-  const proc = _spawn(["gh", "api", endpoint], {
+): Promise<T[]> {
+  const proc = _spawn(["gh", "api", "--paginate", "--slurp", endpoint], {
     stdout: "pipe", stderr: "pipe", cwd: repoDir,
   })
   await proc.exited
-  if (proc.exitCode !== 0) return null
+  if (proc.exitCode !== 0) return []
   try {
-    return JSON.parse(await (proc.stdout as { text(): Promise<string> }).text()) as T
+    const pages = JSON.parse(await (proc.stdout as { text(): Promise<string> }).text())
+    return (Array.isArray(pages) ? pages.flat() : []) as T[]
   } catch {
-    return null
+    return []
   }
 }
 
@@ -205,38 +210,50 @@ export async function fetchPRThreads(
     return []
   }
 
-  // 1. REST comments — full per-comment detail (side, ranges, author, reply links)
-  const rest = await ghJson<RestReviewComment[]>(
+  // 1. REST comments — full per-comment detail (side, ranges, author, reply links).
+  // Paginated so PRs with >100 review comments import completely.
+  const rest = await ghPaginated<RestReviewComment>(
     repoDir, `/repos/${owner}/${name}/pulls/${prNumber}/comments?per_page=100`, _spawn,
   )
-  if (!Array.isArray(rest) || rest.length === 0) return []
+  if (rest.length === 0) return []
 
-  // 2. GraphQL threads — map each comment's databaseId to its thread + resolve state
-  const gqlBody = JSON.stringify({
-    query: PR_THREADS_QUERY,
-    variables: { owner, repo: name, number: prNumber },
-  })
-  const gproc = _spawn(
-    ["gh", "api", "graphql", "--input", "-"],
-    { stdout: "pipe", stderr: "pipe", stdin: Buffer.from(gqlBody) },
-  )
-  await gproc.exited
+  // 2. GraphQL threads — map each comment's databaseId to its thread + resolve
+  // state, paginating through every thread (>100 supported).
+  type ReviewThreadsPage = {
+    pageInfo?: { hasNextPage: boolean; endCursor: string | null }
+    nodes?: Array<{
+      id: string; isResolved: boolean
+      comments: { nodes: Array<{ fullDatabaseId: string | null; outdated: boolean }> }
+    }>
+  }
   const threadOf = new Map<number, { threadId: string; resolved: boolean; outdated: boolean }>()
-  if (gproc.exitCode === 0) {
+  let cursor: string | null = null
+  for (let page = 0; page < 100; page++) {
+    const gqlBody = JSON.stringify({
+      query: PR_THREADS_QUERY,
+      variables: { owner, repo: name, number: prNumber, cursor },
+    })
+    const gproc = _spawn(
+      ["gh", "api", "graphql", "--input", "-"],
+      { stdout: "pipe", stderr: "pipe", stdin: Buffer.from(gqlBody) },
+    )
+    await gproc.exited
+    if (gproc.exitCode !== 0) break
+    let rt: ReviewThreadsPage | undefined
     try {
       const resp = JSON.parse(await (gproc.stdout as { text(): Promise<string> }).text()) as {
-        data?: { repository?: { pullRequest?: { reviewThreads?: { nodes?: Array<{
-          id: string; isResolved: boolean
-          comments: { nodes: Array<{ fullDatabaseId: string | null; outdated: boolean }> }
-        }> } } } }
+        data?: { repository?: { pullRequest?: { reviewThreads?: ReviewThreadsPage } } }
       }
-      for (const t of resp?.data?.repository?.pullRequest?.reviewThreads?.nodes ?? []) {
-        for (const c of t.comments.nodes) {
-          if (c.fullDatabaseId == null) continue
-          threadOf.set(Number(c.fullDatabaseId), { threadId: t.id, resolved: t.isResolved, outdated: c.outdated })
-        }
+      rt = resp?.data?.repository?.pullRequest?.reviewThreads
+    } catch { break }
+    for (const t of rt?.nodes ?? []) {
+      for (const c of t.comments.nodes) {
+        if (c.fullDatabaseId == null) continue
+        threadOf.set(Number(c.fullDatabaseId), { threadId: t.id, resolved: t.isResolved, outdated: c.outdated })
       }
-    } catch { /* fall back to no thread/resolve info */ }
+    }
+    if (!rt?.pageInfo?.hasNextPage) break
+    cursor = rt.pageInfo.endCursor
   }
 
   // 3. Group REST comments into threads by in_reply_to chains; map to ReviewComment.
@@ -310,11 +327,11 @@ export async function fetchPRConversation(
 
   const out: import("./session").ConversationComment[] = []
 
-  // Issue comments = the top-level PR conversation
-  const issueComments = await ghJson<Array<{
+  // Issue comments = the top-level PR conversation (all pages)
+  const issueComments = await ghPaginated<{
     id: number; user: { login: string } | null; body: string; created_at: string
-  }>>(repoDir, `/repos/${owner}/${name}/issues/${prNumber}/comments?per_page=100`, _spawn)
-  for (const c of issueComments ?? []) {
+  }>(repoDir, `/repos/${owner}/${name}/issues/${prNumber}/comments?per_page=100`, _spawn)
+  for (const c of issueComments) {
     if (!c.body?.trim()) continue
     out.push({
       id: crypto.randomUUID(),
@@ -326,11 +343,11 @@ export async function fetchPRConversation(
     })
   }
 
-  // Reviews with a summary body (the "LGTM, but…" + decision)
-  const reviews = await ghJson<Array<{
+  // Reviews with a summary body (the "LGTM, but…" + decision) — all pages
+  const reviews = await ghPaginated<{
     id: number; user: { login: string } | null; body: string; state: string; submitted_at: string
-  }>>(repoDir, `/repos/${owner}/${name}/pulls/${prNumber}/reviews?per_page=100`, _spawn)
-  for (const r of reviews ?? []) {
+  }>(repoDir, `/repos/${owner}/${name}/pulls/${prNumber}/reviews?per_page=100`, _spawn)
+  for (const r of reviews) {
     if (!r.body?.trim()) continue
     const stateMap: Record<string, import("./session").ConversationComment["state"]> = {
       APPROVED: "APPROVED", CHANGES_REQUESTED: "CHANGES_REQUESTED",
@@ -347,7 +364,8 @@ export async function fetchPRConversation(
     })
   }
 
-  out.sort((a, b) => a.created_at.localeCompare(b.created_at))
+  // Newest first.
+  out.sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))
   return out
 }
 

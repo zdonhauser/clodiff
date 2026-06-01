@@ -313,6 +313,21 @@ describe("fetchPRThreads", () => {
     const threads = await fetchPRThreads("/repo", 1, "abc", spawn)
     expect(threads).toEqual([])
   })
+
+  it("merges paginated (slurped) REST comment pages", async () => {
+    // gh --paginate --slurp returns [[page1], [page2]]
+    const page1 = [restComment({ id: 1, body: "c1", line: 1 })]
+    const page2 = [restComment({ id: 2, body: "c2", line: 2 })]
+    const gql = graphql([])
+    const { spawn } = makeSpawn([
+      repoView,
+      { exitCode: 0, stdout: JSON.stringify([page1, page2]) },
+      { exitCode: 0, stdout: gql },
+    ])
+    const threads = await fetchPRThreads("/repo", 1, "abc", spawn)
+    expect(threads).toHaveLength(2)
+    expect(threads.map((t) => t.body).sort()).toEqual(["c1", "c2"])
+  })
 })
 
 describe("resolveThreads", () => {

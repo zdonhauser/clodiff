@@ -1,6 +1,6 @@
 {
   "name": "clodiff",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "A local code viewer for Claude — shared visual context for code discussions",
   "license": "MIT",
   "type": "module",
