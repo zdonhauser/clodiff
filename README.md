@@ -1,4 +1,4 @@
-# clodiff
+# clodiff (e2e test branch)
 
 A local code review viewer for Claude Code. Run it in any repo and Claude can navigate the diff, highlight lines, leave inline annotations, and submit full GitHub PR reviews — all from a shared browser window.
 
