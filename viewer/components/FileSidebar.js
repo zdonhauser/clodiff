@@ -181,7 +181,7 @@ function saveAllFiles(v) {
  *   textSize         — "sm"|"md"|"lg"
  *   onTextSizeChange — (s: string) => void
  */
-export function FileSidebar({ open, session, diff = [], comments = [], onNavigate, onClose, allFilesMode, onAllFilesChange, textSize, onTextSizeChange, wrap, onWrapChange }) {
+export function FileSidebar({ open, session, diff = [], comments = [], allExpanded = true, onToggleAll, onNavigate, onClose, allFilesMode, onAllFilesChange, textSize, onTextSizeChange, wrap, onWrapChange }) {
   const [openDirs, setOpenDirs] = useState({})
   const [treeFiles, setTreeFiles] = useState([])
   const isMobile = useIsMobile()
@@ -267,14 +267,44 @@ export function FileSidebar({ open, session, diff = [], comments = [], onNavigat
         minWidth: isMobile ? "260px" : "220px",
       }}>
         <div style=${{
-          fontSize: "11px",
-          fontWeight: "600",
-          color: "var(--color-fg-muted)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
           padding: "2px 8px 6px",
-          textTransform: "uppercase",
-          letterSpacing: "0.5px",
         }}>
-          ${allFilesMode ? "All files" : "Files changed"}
+          <span style=${{
+            fontSize: "11px",
+            fontWeight: "600",
+            color: "var(--color-fg-muted)",
+            textTransform: "uppercase",
+            letterSpacing: "0.5px",
+          }}>
+            ${allFilesMode ? "All files" : "Files changed"}
+          </span>
+          ${diff.length > 0 && onToggleAll && html`
+            <button
+              onClick=${onToggleAll}
+              title=${allExpanded ? "Collapse all files" : "Expand all files"}
+              aria-label=${allExpanded ? "Collapse all files" : "Expand all files"}
+              style=${{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "var(--color-fg-muted)",
+                padding: "2px",
+                borderRadius: "var(--radius-sm)",
+              }}
+              onMouseEnter=${(e) => { e.currentTarget.style.color = "var(--color-fg-default)" }}
+              onMouseLeave=${(e) => { e.currentTarget.style.color = "var(--color-fg-muted)" }}
+            >
+              ${allExpanded
+                ? html`<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 18.59L8.83 20 12 16.83 15.17 20l1.41-1.41L12 14l-4.59 4.59zm9.18-13.18L15.17 4 12 7.17 8.83 4 7.41 5.41 12 10l4.59-4.59z"/></svg>`
+                : html`<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5.83L15.17 9l1.41-1.41L12 3 7.41 7.59 8.83 9 12 5.83zm0 12.34L8.83 15l-1.41 1.41L12 21l4.59-4.59L15.17 15 12 18.17z"/></svg>`}
+            </button>
+          `}
         </div>
 
         <!-- Root-level files (no directory) -->

@@ -132,13 +132,30 @@ function App() {
     }, 50)
   }, [comments, sortedUnresolved, expandFile])
 
-  // Toggle expand/collapse for a file
+  // Toggle expand/collapse for a file. A file renders expanded unless its value
+  // is explicitly false, so flip on that: collapsed → expand, otherwise collapse.
   const handleToggle = useCallback((path) => {
     setExpandedFiles((prev) => ({
       ...prev,
-      [path]: !prev[path],
+      [path]: prev[path] === false,
     }))
   }, [])
+
+  // Are all files currently expanded? Drives the expand/collapse-all button.
+  const allExpanded = useMemo(
+    () => diff.length > 0 && diff.every((f) => expandedFiles[f.path] !== false),
+    [diff, expandedFiles],
+  )
+
+  // Expand or collapse every file at once.
+  const handleToggleAll = useCallback(() => {
+    setExpandedFiles(() => {
+      const expand = !allExpanded
+      const next = {}
+      for (const f of diff) next[f.path] = expand
+      return next
+    })
+  }, [diff, allExpanded])
 
   // Fetch session from server
   const fetchSession = useCallback(async () => {
@@ -180,15 +197,17 @@ function App() {
         setComments(msg.comments || [])
         if (msg.session) setSession(msg.session)
 
-        // Files with comments are expanded by default; all others are collapsed
+        // Every file is expanded by default so the whole diff is visible at a
+        // glance. Preserve the user's manual collapse/expand choices across
+        // hot-reload broadcasts — only brand-new files default to expanded.
         const initDiff = msg.diff || []
-        const initComments = msg.comments || []
-        const filesWithComments = new Set(initComments.map((c) => c.path))
-        const expandedMap = {}
-        for (const file of initDiff) {
-          expandedMap[file.path] = filesWithComments.has(file.path)
-        }
-        setExpandedFiles(expandedMap)
+        setExpandedFiles((prev) => {
+          const next = {}
+          for (const file of initDiff) {
+            next[file.path] = prev[file.path] !== undefined ? prev[file.path] : true
+          }
+          return next
+        })
         break
       }
 
@@ -416,6 +435,8 @@ function App() {
           session=${session}
           diff=${diff}
           comments=${comments}
+          allExpanded=${allExpanded}
+          onToggleAll=${handleToggleAll}
           onNavigate=${handleSidebarNavigate}
           onClose=${handleToggleSidebar}
           allFilesMode=${allFilesMode}

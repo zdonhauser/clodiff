@@ -5,9 +5,7 @@ test("highlight broadcast adds clodiff-highlight class to the target line", asyn
   // Wait for Preact to render file sections
   await page.waitForSelector("[data-file-path='app.ts']", { timeout: 15000 })
 
-  // Expand app.ts by clicking the file header (first child div with the toggle handler)
-  await page.locator("[data-file-path='app.ts'] > div").first().click()
-  // Wait for line rows to render inside the expanded file
+  // Files are expanded by default, so the line rows are already present.
   await page.waitForSelector('[data-path="app.ts"]', { timeout: 5000 })
 
   // Broadcast a highlight event for app.ts line 2 (the added farewell function)
