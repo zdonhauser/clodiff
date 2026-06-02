@@ -90,6 +90,7 @@ on submit.
 --port <number>    Port to listen on (default: 7777, auto-increments if taken)
 --resume           Resume existing session without warning
 --stop             Stop the clodiff server running for this repo
+--status           Show whether a server is running for this repo (port/pid)
 -h, --help         Show usage and exit
 -v, --version      Print the version and exit
 ```
@@ -187,7 +188,13 @@ relaunch. `--resume` forces resumption of an existing session without the prompt
 detached in its own session (via `setsid`), so it **survives the terminal or Claude
 session that launched it** — you won't come back to a dead localhost tab. Stop a
 server with `clodiff --stop` from the repo (the review state is kept, so you can
-resume later). The daemon logs to `<git-dir>/clodiff/clodiff.log`.
+resume later), and check `clodiff --status` to see whether one is running and on
+which port. The daemon logs to `<git-dir>/clodiff/clodiff.log`.
+
+Identity is **per git worktree**: clodiff keys its session/port off
+`git rev-parse --absolute-git-dir`, so each worktree (and each separate repo) gets
+its own independent daemon, port, and diff — run as many at once as you like, with
+no cross-talk. Only the *same directory* opened twice shares a daemon.
 
 ---
 

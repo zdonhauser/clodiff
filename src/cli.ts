@@ -214,6 +214,7 @@ Other:
   --port <number>       Port to serve on (default 7777)
   --resume              Reuse the existing session for this repo
   --stop                Stop the clodiff server running for this repo
+  --status              Show whether a server is running for this repo (port/pid)
   -h, --help            Show this help
   -v, --version         Print the version
 
@@ -468,7 +469,7 @@ export async function main(): Promise<void> {
 
   const url = `http://localhost:${port}`
   openBrowser(url)
-  console.log(`clodiff: listening at ${url}`)
+  console.log(`clodiff: listening at ${url} — serving ${repoDir} (pid ${process.pid})`)
 }
 
 // Re-launch clodiff as a detached background daemon, then return so the caller
@@ -514,7 +515,7 @@ async function daemonize(rawArgs: string[], repoDir: string): Promise<void> {
     env: { ...process.env, CLODIFF_DAEMON: "1" },
   })
   child.unref()
-  console.log(`clodiff: starting in the background — the viewer will open shortly (logs: ${logFile})`)
+  console.log(`clodiff: starting in the background for ${repoDir} — the viewer will open shortly (logs: ${logFile})`)
 }
 
 // Stop the clodiff daemon serving this repo. Verifies the server on the recorded
@@ -551,6 +552,27 @@ async function stopServer(repoDir: string): Promise<void> {
   }
 }
 
+// Report whether a live clodiff is serving THIS repo, with its port/pid. Verifies
+// the port actually answers for this repo so it never reports a recycled port
+// (now owned by a different repo) as ours.
+async function statusServer(repoDir: string): Promise<void> {
+  const s = await loadSession(repoDir)
+  if (!s?.port) {
+    console.log(`clodiff: not running for ${repoDir}`)
+    return
+  }
+  const live = await fetch(`http://localhost:${s.port}/session`, { signal: AbortSignal.timeout(600) })
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null)
+  if (live && live.repo === repoDir) {
+    console.log(`clodiff: running — http://localhost:${s.port} (pid ${live.pid ?? s.pid}) serving ${repoDir}`)
+  } else if (live) {
+    console.log(`clodiff: not running for ${repoDir} — port ${s.port} is now serving a different repo (${live.repo})`)
+  } else {
+    console.log(`clodiff: not running for ${repoDir} (stale session recorded on port ${s.port})`)
+  }
+}
+
 // CLI entry: handle the one-shot flags, then either run the server (when we're
 // the daemon child, or when daemonizing is disabled) or spawn the daemon.
 export async function runCli(): Promise<void> {
@@ -558,6 +580,7 @@ export async function runCli(): Promise<void> {
   if (rawArgs.includes("--help") || rawArgs.includes("-h")) { console.log(HELP); return }
   if (rawArgs.includes("--version") || rawArgs.includes("-v")) { console.log(await readVersion()); return }
   if (rawArgs.includes("--stop")) { await stopServer(process.cwd()); return }
+  if (rawArgs.includes("--status")) { await statusServer(process.cwd()); return }
 
   // CLODIFF_DAEMON: we ARE the detached child — run the server in the foreground
   // of our own session. CLODIFF_NO_DAEMON: opt out of daemonizing (tests run the
