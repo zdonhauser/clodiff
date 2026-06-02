@@ -146,7 +146,16 @@ function App() {
       const res = await fetch("/session")
       if (!res.ok) return
       const data = await res.json()
-      setSession(data)
+      // _from/_to/_default_branch are live diff-view state injected by the server's
+      // init payload — they're never persisted to session.json. A session_update
+      // refresh reloads the on-disk session (annotations etc.), so preserve the
+      // current view range rather than letting it fall back to defaults.
+      setSession((prev) => ({
+        ...data,
+        _from: data._from ?? prev?._from,
+        _to: data._to ?? prev?._to,
+        _default_branch: data._default_branch ?? prev?._default_branch,
+      }))
       // Flatten comments from all reviews and update state
       const flatComments = (data.reviews || []).flatMap((r) => r.comments || [])
       setComments(flatComments)
