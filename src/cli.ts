@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 import { readFile } from "fs/promises"
-import { realpathSync } from "fs"
+import { realpathSync, openSync, mkdirSync, writeFileSync } from "fs"
 import { join } from "path"
-import { spawnSync } from "child_process"
+import { tmpdir } from "os"
+import { spawn, spawnSync } from "child_process"
 import { fileURLToPath } from "url"
 import { parseDiff } from "./diff-parser.ts"
-import { loadSession, saveSession } from "./session.ts"
+import { loadSession, saveSession, reviewDir } from "./session.ts"
 import type { SessionFile, Review } from "./session.ts"
 import { reanchorComments } from "./anchoring.ts"
 import { startServer } from "./server.ts"
@@ -177,6 +178,7 @@ function detectDefaultBranch(repoDir: string): string {
 }
 
 function openBrowser(url: string): void {
+  if (process.env.BROWSER === "none") return
   const platform = process.platform
   if (platform === "darwin") {
     spawnSync("open", [url])
@@ -211,41 +213,17 @@ Diff source (default: working tree vs the base branch):
 Other:
   --port <number>       Port to serve on (default 7777)
   --resume              Reuse the existing session for this repo
+  --stop                Stop the clodiff server running for this repo
   -h, --help            Show this help
   -v, --version         Print the version
 
-The viewer opens in your browser and hot-reloads as the repo changes.`
+clodiff runs as a background daemon detached from the shell that launched it,
+so the viewer survives when that terminal or Claude session ends. Stop it with
+'clodiff --stop' (the review state is kept so you can resume later).`
 
 export async function main(): Promise<void> {
-  const rawArgs = process.argv.slice(2)
-  if (rawArgs.includes("--help") || rawArgs.includes("-h")) {
-    console.log(HELP)
-    return
-  }
-  if (rawArgs.includes("--version") || rawArgs.includes("-v")) {
-    console.log(await readVersion())
-    return
-  }
-
-  const args = parseArgs(rawArgs)
+  const args = parseArgs(process.argv.slice(2))
   const repoDir = process.cwd()
-
-  // If a clodiff is already serving this repo, reuse it instead of starting a
-  // second server (which would pop another browser window). The running session
-  // hot-reloads on changes, so re-running is rarely needed anyway.
-  if (!args.stdin) {
-    const prior = await loadSession(repoDir)
-    if (prior?.port) {
-      const alive = await fetch(`http://localhost:${prior.port}/session`, { signal: AbortSignal.timeout(600) })
-        .then((r) => r.ok).catch(() => false)
-      if (alive) {
-        const url = `http://localhost:${prior.port}`
-        console.log(`clodiff: already running at ${url} — reusing it (it hot-reloads on changes)`)
-        openBrowser(url)
-        return
-      }
-    }
-  }
 
   // --- Determine diff text ---
   let diffText: string
@@ -456,7 +434,7 @@ export async function main(): Promise<void> {
   }
 
   // Start the server
-  const { port, server: _server } = await startServer({
+  const { port, server } = await startServer({
     port: args.port,
     repoDir,
     viewerDir: join(import.meta.dirname, "..", "viewer"),
@@ -471,22 +449,130 @@ export async function main(): Promise<void> {
     onSetMode,
   })
 
-  // Update session with actual port (may differ if port was taken)
+  // Record the actual port (may differ if the requested one was taken) and our
+  // PID so `clodiff --stop` can find and signal this daemon.
   session.port = port
+  session.pid = process.pid
 
   await saveSession(repoDir, session)
 
+  // Shut down cleanly on SIGTERM/SIGINT (e.g. from `clodiff --stop`). We keep
+  // session.json so the review can be resumed; the stale port/pid is harmless
+  // because the reuse-guard liveness-probes before trusting it.
+  const shutdown = () => {
+    try { server.close() } catch { /* already closing */ }
+    process.exit(0)
+  }
+  process.on("SIGTERM", shutdown)
+  process.on("SIGINT", shutdown)
+
   const url = `http://localhost:${port}`
-
   openBrowser(url)
-
   console.log(`clodiff: listening at ${url}`)
 }
 
-// Run main() when this file is the entry point. Compare *realpaths*: when clodiff
-// is launched through its npm bin symlink, process.argv[1] is the symlink path
-// while import.meta.url already resolves to the realpath — so a raw string
-// compare would never match and main() would silently never run.
+// Re-launch clodiff as a detached background daemon, then return so the caller
+// (the shell / Claude tool) exits immediately. The daemon runs in its own
+// session — `spawn({ detached: true })` calls setsid() — so it is NOT in the
+// launcher's process group and survives when that terminal or Claude session is
+// torn down. This is the fix for "dead localhost servers": previously the server
+// was a non-detached child and got group-killed when its session ended.
+async function daemonize(rawArgs: string[], repoDir: string): Promise<void> {
+  // Reuse an already-running server for THIS repo (verify the repo matches, so a
+  // recycled port now owned by a different repo's clodiff isn't mistaken for ours).
+  const prior = await loadSession(repoDir)
+  if (prior?.port) {
+    const live = await fetch(`http://localhost:${prior.port}/session`, { signal: AbortSignal.timeout(600) })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+    if (live && live.repo === repoDir) {
+      const url = `http://localhost:${prior.port}`
+      console.log(`clodiff: already running at ${url} — reusing it (it hot-reloads on changes)`)
+      openBrowser(url)
+      return
+    }
+  }
+
+  // stdin can't cross the fork, so materialize a piped diff to a temp patch file
+  // and hand the daemon a --patch instead.
+  let args = rawArgs
+  if (rawArgs.includes("--stdin")) {
+    const diff = await readStdin()
+    const tmp = join(tmpdir(), `clodiff-stdin-${process.pid}-${Date.now()}.patch`)
+    writeFileSync(tmp, diff)
+    args = rawArgs.filter((a) => a !== "--stdin").concat(["--patch", tmp])
+  }
+
+  const dir = reviewDir(repoDir)
+  mkdirSync(dir, { recursive: true })
+  const logFile = join(dir, "clodiff.log")
+  const out = openSync(logFile, "a")
+  const script = fileURLToPath(import.meta.url)
+  const child = spawn(process.execPath, [script, ...args], {
+    detached: true,
+    stdio: ["ignore", out, out],
+    env: { ...process.env, CLODIFF_DAEMON: "1" },
+  })
+  child.unref()
+  console.log(`clodiff: starting in the background — the viewer will open shortly (logs: ${logFile})`)
+}
+
+// Stop the clodiff daemon serving this repo. Verifies the server on the recorded
+// port actually belongs to this repo before killing its PID, so we never signal a
+// recycled PID or another repo's server. session.json is left in place so the
+// review can be resumed later.
+async function stopServer(repoDir: string): Promise<void> {
+  const s = await loadSession(repoDir)
+  if (!s?.port) {
+    console.log("clodiff: no running session recorded for this repo")
+    return
+  }
+  const live = await fetch(`http://localhost:${s.port}/session`, { signal: AbortSignal.timeout(600) })
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null)
+  if (!live) {
+    console.log(`clodiff: no live server on port ${s.port} (already stopped)`)
+    return
+  }
+  if (live.repo !== repoDir) {
+    console.log(`clodiff: port ${s.port} is serving a different repo now — not touching it`)
+    return
+  }
+  const pid = live.pid ?? s.pid
+  if (!pid) {
+    console.log("clodiff: running but no PID recorded — stop it manually")
+    return
+  }
+  try {
+    process.kill(pid, "SIGTERM")
+    console.log(`clodiff: stopped (pid ${pid}, was on port ${s.port})`)
+  } catch (err) {
+    console.log(`clodiff: could not signal pid ${pid}: ${err instanceof Error ? err.message : err}`)
+  }
+}
+
+// CLI entry: handle the one-shot flags, then either run the server (when we're
+// the daemon child, or when daemonizing is disabled) or spawn the daemon.
+export async function runCli(): Promise<void> {
+  const rawArgs = process.argv.slice(2)
+  if (rawArgs.includes("--help") || rawArgs.includes("-h")) { console.log(HELP); return }
+  if (rawArgs.includes("--version") || rawArgs.includes("-v")) { console.log(await readVersion()); return }
+  if (rawArgs.includes("--stop")) { await stopServer(process.cwd()); return }
+
+  // CLODIFF_DAEMON: we ARE the detached child — run the server in the foreground
+  // of our own session. CLODIFF_NO_DAEMON: opt out of daemonizing (tests run the
+  // server in-process so they can kill it directly).
+  if (process.env.CLODIFF_DAEMON === "1" || process.env.CLODIFF_NO_DAEMON === "1") {
+    await main()
+    return
+  }
+  await daemonize(rawArgs, process.cwd())
+}
+
+// Run when this file is the entry point. Compare *realpaths*: when clodiff is
+// launched through its npm bin symlink, process.argv[1] is the symlink path
+// while import.meta.url already resolves to the realpath — a raw string compare
+// would never match and the CLI would silently never run.
 function isMainEntry(): boolean {
   const entry = process.argv[1]
   if (!entry) return false
@@ -500,5 +586,5 @@ function isMainEntry(): boolean {
 }
 
 if (isMainEntry()) {
-  main().catch(console.error)
+  runCli().catch(console.error)
 }

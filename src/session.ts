@@ -80,6 +80,7 @@ export interface SessionFile {
   created_at: string
   updated_at: string
   port?: number
+  pid?: number // PID of the running clodiff daemon (for --stop)
 }
 
 export interface ReplyEntry {

@@ -58,22 +58,28 @@ try {
   if (!/^\d+\.\d+\.\d+/.test(ver)) fail(`--version through bin symlink gave: ${JSON.stringify(ver)}`)
   console.log("ok: clodiff --version ->", ver)
 
-  // 2) start the server through the bin symlink and require it to serve.
+  // 2) launch as a detached daemon through the bin symlink. The launcher returns
+  // immediately; the real server is a detached child that must come up and serve.
   const port = 7836
   const sess = join(repo, ".git", "clodiff", "session.json")
-  let log = ""
-  child = spawn("node", ["node_modules/.bin/clodiff", "--working", "--port", String(port)], {
-    cwd: repo, env: { ...process.env, BROWSER: "none" }, stdio: ["ignore", "pipe", "pipe"],
+  const launch = spawnSync("node", ["node_modules/.bin/clodiff", "--working", "--port", String(port)], {
+    cwd: repo, env: { ...process.env, BROWSER: "none" }, encoding: "utf-8",
   })
-  child.stdout.on("data", (d) => (log += d))
-  child.stderr.on("data", (d) => (log += d))
+  if (launch.status !== 0) fail(`launcher exited ${launch.status}: ${launch.stdout || ""}${launch.stderr || ""}`)
 
   let booted = false
   for (let i = 0; i < 60; i++) {
     await wait(250)
     if (existsSync(sess)) { try { if (JSON.parse(readFileSync(sess, "utf-8")).port) { booted = true; break } } catch {} }
   }
-  if (!booted) fail(`server never wrote session.json (the symlink-guard bug). log: ${JSON.stringify(log.trim())}`)
+  if (!booted) {
+    const log = existsSync(join(repo, ".git/clodiff/clodiff.log")) ? readFileSync(join(repo, ".git/clodiff/clodiff.log"), "utf-8") : "(no log)"
+    fail(`daemon never wrote session.json (symlink-guard or detach bug). log: ${JSON.stringify(log.trim())}`)
+  }
+
+  // Detachment check: the daemon must NOT be a child of this smoke process.
+  const sessionData = JSON.parse(readFileSync(sess, "utf-8"))
+  if (sessionData.pid === process.pid) fail("daemon ran in-process — not detached")
 
   const init = await fetch(`http://localhost:${port}/init`).then((r) => r.json()).catch((e) => ({ err: e.message }))
   if (!Array.isArray(init.diff)) fail(`/init did not return a diff: ${JSON.stringify(init)}`)
@@ -81,11 +87,22 @@ try {
   if (!html.includes("<!DOCTYPE html")) fail("viewer HTML not served from the shipped viewer/ dir")
   const assetOk = await fetch(`http://localhost:${port}/app.js`).then((r) => r.ok).catch(() => false)
   if (!assetOk) fail("viewer asset app.js not served")
+  console.log("ok: detached daemon boots and serves (pid", sessionData.pid + ", port", port + ", files:", init.diff.length + ")")
 
-  console.log("ok: installed server boots and serves (port", port + ", files:", init.diff.length + ")")
-  child.kill()
+  // 3) `clodiff --stop` must shut the daemon down.
+  run("node", ["node_modules/.bin/clodiff", "--stop"], { cwd: repo, env: { ...process.env, BROWSER: "none" } })
+  let stopped = false
+  for (let i = 0; i < 20; i++) {
+    await wait(250)
+    const alive = await fetch(`http://localhost:${port}/session`, { signal: AbortSignal.timeout(400) }).then((r) => r.ok).catch(() => false)
+    if (!alive) { stopped = true; break }
+  }
+  if (!stopped) fail("clodiff --stop did not stop the daemon")
+  console.log("ok: clodiff --stop shut the daemon down")
+
   rmSync(work, { recursive: true, force: true })
   console.log("SMOKE PASS")
 } catch (err) {
+  if (child) { try { child.kill() } catch {} }
   fail(err.message)
 }

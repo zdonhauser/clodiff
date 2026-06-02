@@ -72,7 +72,9 @@ export const test = base.extend<{ server: ServerContext }>({
       try {
         proc = spawn(TSX_BIN, [CLI_PATH, "--from", "HEAD~1", "--to", "HEAD", "--port", String(E2E_PORT)], {
           cwd: repoDir,
-          env: { ...process.env, CI: "1" },
+          // CLODIFF_NO_DAEMON keeps the server in this process so proc.kill()
+          // tears it down; BROWSER=none stops it opening a real browser tab.
+          env: { ...process.env, CI: "1", CLODIFF_NO_DAEMON: "1", BROWSER: "none" },
           stdio: "pipe",
         })
 

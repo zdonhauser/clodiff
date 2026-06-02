@@ -89,6 +89,7 @@ on submit.
 --patch <path>     Read diff from a patch file
 --port <number>    Port to listen on (default: 7777, auto-increments if taken)
 --resume           Resume existing session without warning
+--stop             Stop the clodiff server running for this repo
 -h, --help         Show usage and exit
 -v, --version      Print the version and exit
 ```
@@ -179,6 +180,14 @@ Re-running `clodiff` in a repo that already has a live session **reuses the
 running window** instead of opening a second one, and the viewer **hot-reloads**:
 edit code, commit, or switch branches and the diff updates itself — no need to
 relaunch. `--resume` forces resumption of an existing session without the prompt.
+
+### Background daemon
+
+`clodiff` **self-daemonizes**: the command returns immediately and the server runs
+detached in its own session (via `setsid`), so it **survives the terminal or Claude
+session that launched it** — you won't come back to a dead localhost tab. Stop a
+server with `clodiff --stop` from the repo (the review state is kept, so you can
+resume later). The daemon logs to `<git-dir>/clodiff/clodiff.log`.
 
 ---
 
