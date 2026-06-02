@@ -83,6 +83,7 @@ export interface ServerOptions {
   getInitPayload?: () => unknown | Promise<unknown>
   getRefs?: () => Promise<RefEntry[]>
   onRediff?: (from: string, to: string) => Promise<unknown>
+  onSetMode?: (mode: string) => Promise<unknown>
 }
 
 export interface StartServerResult {
@@ -92,7 +93,7 @@ export interface StartServerResult {
 }
 
 export async function startServer(options: ServerOptions): Promise<StartServerResult> {
-  const { repoDir, viewerDir, getInitPayload, getRefs, onRediff } = options
+  const { repoDir, viewerDir, getInitPayload, getRefs, onRediff, onSetMode } = options
   const wsClients = new Set<WebSocket>()
 
   // Route handler — written against web-standard Request/Response. The Node http
@@ -556,6 +557,25 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
               } catch (err: unknown) {
                 const msg = err instanceof Error ? err.message : "Unknown error"
                 return new Response(msg, { status: 500 })
+              }
+            }).catch(() => new Response("Invalid JSON", { status: 400 }))
+          }
+
+          // POST /mode — switch diff mode from the UI (working / base / base-remote
+          // / last-commit / pr). "pr" imports the PR's review data.
+          if (url.pathname === "/mode" && req.method === "POST") {
+            return req.json().then(async (body: { mode: string }) => {
+              if (!onSetMode) return new Response("Mode switching not supported", { status: 501 })
+              if (!body.mode) return new Response("mode is required", { status: 400 })
+              try {
+                const payload = await onSetMode(body.mode)
+                const msg = JSON.stringify(payload)
+                for (const client of wsClients) {
+                  try { client.send(msg) } catch { /* disconnected */ }
+                }
+                return new Response(msg, { status: 200, headers: { "Content-Type": "application/json" } })
+              } catch (err: unknown) {
+                return new Response(err instanceof Error ? err.message : "Unknown error", { status: 500 })
               }
             }).catch(() => new Response("Invalid JSON", { status: 400 }))
           }

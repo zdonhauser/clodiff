@@ -404,6 +404,7 @@ function App() {
         `}
         <${FileSidebar}
           open=${sidebarOpen}
+          session=${session}
           diff=${diff}
           comments=${comments}
           onNavigate=${handleSidebarNavigate}

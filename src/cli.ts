@@ -135,20 +135,44 @@ function runGitDiff(repoDir: string, from: string, to: string): string {
   return result.stdout
 }
 
+// Refs available in the ref picker: recent commits (working tree backwards) +
+// local branches + remote branches, each tagged with a `kind` for grouping.
+// Uses \x1f (unit separator) so commit messages containing "|" don't break parsing.
 function getRefs(repoDir: string) {
-  const result = spawnSync(
-    "git",
-    ["for-each-ref", "refs/heads", "--format=%(refname:short)|%(objectname:short)|%(contents:subject)|%(committerdate:relative)", "--sort=-committerdate"],
-    { cwd: repoDir, encoding: "utf-8" }
-  )
-  const lines = (result.stdout || "").trim().split("\n").filter(Boolean)
-  return lines.map((line) => {
-    const [name, sha, ...rest] = line.split("|")
-    // Last segment is the date, everything before is the subject
-    const date = rest[rest.length - 1] ?? ""
-    const subject = rest.slice(0, -1).join("|")
-    return { name, sha, subject, date }
-  })
+  const run = (args: string[]) =>
+    (spawnSync("git", args, { cwd: repoDir, encoding: "utf-8" }).stdout || "")
+  const SEP = "\x1f"
+
+  const commits = run(["log", "-n", "30", `--format=%h${SEP}%s${SEP}%cr`])
+    .trim().split("\n").filter(Boolean).map((line) => {
+      const [name, subject, date] = line.split(SEP)
+      return { name, sha: "", subject, date, kind: "commit" as const }
+    })
+
+  const branchFmt = `%(refname:short)${SEP}%(objectname:short)${SEP}%(contents:subject)${SEP}%(committerdate:relative)`
+  const parseBranches = (out: string, kind: "local" | "remote") =>
+    out.trim().split("\n").filter(Boolean).map((line) => {
+      const [name, sha, subject, date] = line.split(SEP)
+      return { name, sha, subject, date, kind }
+    })
+
+  const local = parseBranches(
+    run(["for-each-ref", "refs/heads", `--format=${branchFmt}`, "--sort=-committerdate"]), "local")
+  const remote = parseBranches(
+    run(["for-each-ref", "refs/remotes", `--format=${branchFmt}`, "--sort=-committerdate"]), "remote")
+    .filter((r) => !r.name.endsWith("/HEAD")) // skip the origin/HEAD symref
+
+  return [...commits, ...local, ...remote]
+}
+
+// Best-effort default branch (origin/HEAD → main/master fallback).
+function detectDefaultBranch(repoDir: string): string {
+  const sym = (spawnSync("git", ["symbolic-ref", "refs/remotes/origin/HEAD"], { cwd: repoDir, encoding: "utf-8" }).stdout || "").trim()
+  if (sym) return sym.replace(/^refs\/remotes\/origin\//, "")
+  for (const b of ["main", "master", "trunk"]) {
+    if (spawnSync("git", ["rev-parse", "--verify", "--quiet", b], { cwd: repoDir, encoding: "utf-8" }).status === 0) return b
+  }
+  return "main"
 }
 
 function openBrowser(url: string): void {
@@ -316,6 +340,19 @@ export async function main(): Promise<void> {
     session.current_commit = headCommit
   }
 
+  const defaultBranch = detectDefaultBranch(repoDir)
+
+  // Build the init payload from the on-disk session + current diff state.
+  const buildInit = async () => {
+    const fresh = (await loadSession(repoDir)) ?? session
+    return {
+      type: "init",
+      diff: diffState.parsed,
+      comments: fresh.reviews.flatMap((r) => r.comments),
+      session: { ...fresh, _from: diffState.from, _to: diffState.to, _default_branch: defaultBranch },
+    }
+  }
+
   // Recompute the diff for ref-based modes so the viewer always reflects the
   // latest working tree (hot reload). stdin/patch diffs are static (from/to null).
   const refreshDiff = () => {
@@ -324,35 +361,74 @@ export async function main(): Promise<void> {
     }
   }
 
+  const setRange = async (from: string, to: string, clearPR: boolean) => {
+    diffState.from = from
+    diffState.to = to
+    diffState.parsed = parseDiff(runGitDiff(repoDir, from, to))
+    if (clearPR) {
+      const s = (await loadSession(repoDir)) ?? session
+      delete s.pr_meta; delete s.pr_number; delete s.pr_conversation
+      delete s.pending_resolves; delete s.pending_replies
+      session = s
+      await saveSession(repoDir, s)
+    }
+    return buildInit()
+  }
+
+  // Switch diff mode from the UI (Settings). "pr" imports the PR's review data.
+  const onSetMode = async (mode: string) => {
+    if (mode === "working") return setRange("HEAD", WORKING_TREE, true)
+    if (mode === "base") return setRange(defaultBranch, WORKING_TREE, true)
+    if (mode === "base-remote") return setRange(`origin/${defaultBranch}`, WORKING_TREE, true)
+    if (mode === "last-commit") return setRange("HEAD~1", "HEAD", true)
+    if (mode === "pr") {
+      const info = await fetchPRInfo(repoDir)
+      if (!info) throw new Error("No open PR found for the current branch")
+      spawnSync("git", ["fetch", "origin", info.headRefName], { cwd: repoDir })
+      diffState.from = info.baseRefName
+      diffState.to = `origin/${info.headRefName}`
+      diffState.parsed = parseDiff(runGitDiff(repoDir, diffState.from, diffState.to))
+      const headCommit = resolveRef(repoDir, diffState.to)
+      const s = (await loadSession(repoDir)) ?? session
+      s.pr_number = info.number
+      s.pr_meta = {
+        number: info.number, title: info.title, author: info.author, body: info.body,
+        state: info.state?.toUpperCase() as "OPEN" | "CLOSED" | "MERGED" | undefined,
+        is_draft: info.is_draft, viewer_login: info.viewer_login,
+        viewer_is_author: !!info.viewer_login && info.viewer_login === info.author,
+        checks_status: info.checks_status,
+      }
+      s.head_commit = headCommit
+      s.current_commit = headCommit
+      const [threads, conv] = await Promise.all([
+        fetchPRThreads(repoDir, info.number, headCommit),
+        fetchPRConversation(repoDir, info.number),
+      ])
+      const review = s.reviews[s.reviews.length - 1]
+      const existing = new Set(review.comments.filter((c) => c.github_id !== undefined).map((c) => c.github_id))
+      review.comments.push(...threads.filter((t) => !existing.has(t.github_id)))
+      s.pr_conversation = conv
+      session = s
+      await saveSession(repoDir, s)
+      return buildInit()
+    }
+    throw new Error(`Unknown mode: ${mode}`)
+  }
+
   // Start the server
   const { port, server: _server } = await startServer({
     port: args.port,
     repoDir,
     viewerDir: join(import.meta.dirname, "..", "viewer"),
-    getInitPayload: async () => {
-      refreshDiff()
-      const freshSession = (await loadSession(repoDir)) ?? session
-      return {
-        type: "init",
-        diff: diffState.parsed,
-        comments: freshSession.reviews.flatMap((r) => r.comments),
-        session: { ...freshSession, _from: diffState.from, _to: diffState.to },
-      }
-    },
+    getInitPayload: async () => { refreshDiff(); return buildInit() },
     getRefs: async () => getRefs(repoDir),
     onRediff: async (from: string, to: string) => {
-      const text = runGitDiff(repoDir, from, to)
-      diffState.parsed = parseDiff(text)
       diffState.from = from
       diffState.to = to
-      const freshSession = (await loadSession(repoDir)) ?? session
-      return {
-        type: "init",
-        diff: diffState.parsed,
-        comments: freshSession.reviews.flatMap((r) => r.comments),
-        session: { ...freshSession, _from: from, _to: to },
-      }
+      diffState.parsed = parseDiff(runGitDiff(repoDir, from, to))
+      return buildInit()
     },
+    onSetMode,
   })
 
   // Update session with actual port (may differ if port was taken)

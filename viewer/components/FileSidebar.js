@@ -181,7 +181,7 @@ function saveAllFiles(v) {
  *   textSize         — "sm"|"md"|"lg"
  *   onTextSizeChange — (s: string) => void
  */
-export function FileSidebar({ open, diff = [], comments = [], onNavigate, onClose, allFilesMode, onAllFilesChange, textSize, onTextSizeChange, wrap, onWrapChange }) {
+export function FileSidebar({ open, session, diff = [], comments = [], onNavigate, onClose, allFilesMode, onAllFilesChange, textSize, onTextSizeChange, wrap, onWrapChange }) {
   const [openDirs, setOpenDirs] = useState({})
   const [treeFiles, setTreeFiles] = useState([])
   const isMobile = useIsMobile()
@@ -308,6 +308,7 @@ export function FileSidebar({ open, diff = [], comments = [], onNavigate, onClos
         transition: "opacity 0.15s ease",
       }}>
         <${SettingsPanel}
+          session=${session}
           allFilesMode=${allFilesMode}
           onAllFilesChange=${onAllFilesChange}
           textSize=${textSize}

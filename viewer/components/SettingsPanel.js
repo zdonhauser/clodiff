@@ -16,9 +16,43 @@ const TEXT_SIZES = [
  *   textSize          — "sm" | "md" | "lg"
  *   onTextSizeChange  — (s: string) => void
  */
-export function SettingsPanel({ allFilesMode, onAllFilesChange, textSize, onTextSizeChange, wrap, onWrapChange }) {
+export function SettingsPanel({ allFilesMode, onAllFilesChange, textSize, onTextSizeChange, wrap, onWrapChange, session }) {
   const [open, setOpen] = useState(false)
+  const [modeBusy, setModeBusy] = useState(null)
+  const [modeError, setModeError] = useState(null)
   const ref = useRef(null)
+
+  // Diff mode — derive the active one from the live diff range + pr_meta.
+  const defaultBranch = session?._default_branch || "main"
+  const from = session?._from
+  const to = session?._to
+  const currentMode = session?.pr_meta ? "pr"
+    : to === "WORKING" && from === "HEAD" ? "working"
+    : to === "WORKING" && from === defaultBranch ? "base"
+    : to === "WORKING" && from === `origin/${defaultBranch}` ? "base-remote"
+    : from === "HEAD~1" && to === "HEAD" ? "last-commit"
+    : "custom"
+  const MODES = [
+    { id: "working", label: "Uncommitted changes", desc: "Working tree vs last commit" },
+    { id: "base", label: `vs ${defaultBranch}`, desc: "Working tree vs local base branch" },
+    { id: "base-remote", label: `vs origin/${defaultBranch}`, desc: "Working tree vs remote base" },
+    { id: "last-commit", label: "Last commit", desc: "Just the most recent commit" },
+    { id: "pr", label: "PR review", desc: "Import this branch's open PR + its comments" },
+  ]
+  const setMode = async (mode) => {
+    setModeBusy(mode); setModeError(null)
+    try {
+      const res = await fetch("/mode", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode }),
+      })
+      if (!res.ok) throw new Error((await res.text()) || "Failed to switch mode")
+    } catch (e) {
+      setModeError(e.message || "Failed to switch mode")
+    } finally {
+      setModeBusy(null)
+    }
+  }
 
   useEffect(() => {
     if (!open) return
@@ -56,7 +90,7 @@ export function SettingsPanel({ allFilesMode, onAllFilesChange, textSize, onText
           position: "absolute",
           bottom: "calc(100% + 6px)",
           left: "0",
-          width: "220px",
+          width: "274px",
           background: "var(--color-bg)",
           border: "1px solid var(--color-border-default)",
           borderRadius: "var(--radius-md)",
@@ -67,6 +101,50 @@ export function SettingsPanel({ allFilesMode, onAllFilesChange, textSize, onText
           <div style=${{ fontSize: "11px", fontWeight: "600", color: "var(--color-fg-muted)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "8px" }}>
             Settings
           </div>
+
+          <!-- Diff mode -->
+          ${session && html`
+            <div style=${{ marginBottom: "10px" }}>
+              <div style=${{ ...label, fontWeight: "600", marginBottom: "6px" }}>Diff mode</div>
+              <div style=${{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                ${MODES.map((m) => {
+                  const active = currentMode === m.id
+                  const busy = modeBusy === m.id
+                  return html`
+                    <button
+                      key=${m.id}
+                      onClick=${() => !active && !modeBusy && setMode(m.id)}
+                      disabled=${!!modeBusy}
+                      style=${{
+                        display: "block", width: "100%", textAlign: "left",
+                        padding: "6px 8px", borderRadius: "var(--radius-sm)",
+                        border: `1px solid ${active ? "var(--color-accent-emphasis)" : "var(--color-border-default)"}`,
+                        background: active ? "var(--color-accent-emphasis)12" : "var(--color-bg)",
+                        cursor: active ? "default" : (modeBusy ? "wait" : "pointer"),
+                        opacity: modeBusy && !busy ? 0.5 : 1,
+                      }}
+                    >
+                      <div style=${{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style=${{ fontSize: "12px", fontWeight: active ? "600" : "500", color: active ? "var(--color-accent-emphasis)" : "var(--color-fg-default)" }}>${m.label}</span>
+                        ${active && html`<span style=${{ marginLeft: "auto", fontSize: "11px", color: "var(--color-accent-fg)" }}>active</span>`}
+                        ${busy && html`<span style=${{ marginLeft: "auto", fontSize: "11px", color: "var(--color-fg-muted)" }}>…</span>`}
+                      </div>
+                      <div style=${{ ...muted, marginTop: "1px" }}>${m.desc}</div>
+                    </button>
+                  `
+                })}
+              </div>
+              ${currentMode === "custom" && html`
+                <div style=${{ ...muted, marginTop: "6px", color: "var(--color-fg-subtle)" }}>
+                  Custom range (set via the header pickers).
+                </div>
+              `}
+              ${modeError && html`
+                <div style=${{ marginTop: "6px", fontSize: "11px", color: "var(--color-danger-fg)" }}>${modeError}</div>
+              `}
+            </div>
+            <div style=${{ borderTop: "1px solid var(--color-border-muted)", margin: "4px 0 8px" }} />
+          `}
 
           <!-- All files -->
           <label style=${{ ...row, cursor: "pointer", gap: "8px" }}>
