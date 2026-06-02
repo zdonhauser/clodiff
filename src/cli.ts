@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readFile } from "fs/promises"
+import { realpathSync } from "fs"
 import { join } from "path"
 import { spawnSync } from "child_process"
 import { fileURLToPath } from "url"
@@ -186,8 +187,47 @@ function openBrowser(url: string): void {
   }
 }
 
+async function readVersion(): Promise<string> {
+  try {
+    const pkg = JSON.parse(await readFile(join(import.meta.dirname, "..", "package.json"), "utf-8"))
+    return pkg.version || "unknown"
+  } catch {
+    return "unknown"
+  }
+}
+
+const HELP = `clodiff — a live code-diff viewer for reviews
+
+Usage: clodiff [options]
+
+Diff source (default: working tree vs the base branch):
+  --base <ref>          Diff the working tree against <ref> (e.g. main)
+  --from <ref> --to <ref>   Diff an explicit range (both required together)
+  --working, --uncommitted  Working tree vs last commit
+  --pr <number>         Review an open pull request by number
+  --patch <text>        Render a unified diff passed as a string
+  --stdin               Read a unified diff from stdin
+
+Other:
+  --port <number>       Port to serve on (default 7777)
+  --resume              Reuse the existing session for this repo
+  -h, --help            Show this help
+  -v, --version         Print the version
+
+The viewer opens in your browser and hot-reloads as the repo changes.`
+
 export async function main(): Promise<void> {
-  const args = parseArgs(process.argv.slice(2))
+  const rawArgs = process.argv.slice(2)
+  if (rawArgs.includes("--help") || rawArgs.includes("-h")) {
+    console.log(HELP)
+    return
+  }
+  if (rawArgs.includes("--version") || rawArgs.includes("-v")) {
+    console.log(await readVersion())
+    return
+  }
+
+  const args = parseArgs(rawArgs)
   const repoDir = process.cwd()
 
   // If a clodiff is already serving this repo, reuse it instead of starting a
@@ -443,6 +483,22 @@ export async function main(): Promise<void> {
   console.log(`clodiff: listening at ${url}`)
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+// Run main() when this file is the entry point. Compare *realpaths*: when clodiff
+// is launched through its npm bin symlink, process.argv[1] is the symlink path
+// while import.meta.url already resolves to the realpath — so a raw string
+// compare would never match and main() would silently never run.
+function isMainEntry(): boolean {
+  const entry = process.argv[1]
+  if (!entry) return false
+  const here = fileURLToPath(import.meta.url)
+  if (entry === here) return true
+  try {
+    return realpathSync(entry) === here
+  } catch {
+    return false
+  }
+}
+
+if (isMainEntry()) {
   main().catch(console.error)
 }

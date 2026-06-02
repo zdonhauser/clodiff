@@ -15,8 +15,8 @@ A local code review viewer for Claude Code. Run it in any repo and Claude can na
 
 ## Installation
 
-Requires [Node.js](https://nodejs.org) **≥ 22.18** (clodiff runs its TypeScript
-directly via Node's built-in type stripping — no build step, no extra runtime).
+Requires [Node.js](https://nodejs.org) **≥ 20.11**. The published package ships
+compiled JavaScript — no extra runtime or build step on your end.
 
 ```bash
 npm install -g clodiff
@@ -209,7 +209,12 @@ This installs two skills and three hooks:
 npm install
 npm test            # unit tests (vitest)
 npm run test:e2e    # Playwright end-to-end tests
+npm run build       # bundle src/ -> dist/cli.js (what gets published)
+npm run smoke       # pack, install, and run the bin as a user would
 ```
 
-Runs on Node ≥ 22.18 (native TypeScript). Tests use vitest; the CLI is launched
-via `tsx` in the E2E harness so it works on older Node too.
+In development the source runs directly: `node src/cli.ts` works on Node ≥ 22.18
+via built-in type stripping, and the test harness launches the CLI through `tsx`
+so it runs on older Node too. Publishing bundles `src/` to `dist/cli.js` with
+esbuild (`prepublishOnly`), because Node won't type-strip files under
+`node_modules` — so the installed package must ship plain JavaScript.

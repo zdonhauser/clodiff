@@ -19,8 +19,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Native TS smoke (Node runs the .ts bin directly)
-        run: node src/cli.ts --help
+      - name: Dev-path smoke (Node runs the .ts source directly)
+        run: node src/cli.ts --version
+
+      - name: Packaged-install smoke (pack, install, run the bin as a user would)
+        run: npm run smoke
 
       - name: Unit tests
         run: npm test

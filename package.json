@@ -1,28 +1,27 @@
 {
   "name": "clodiff",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "A local code viewer for Claude — shared visual context for code discussions",
   "license": "MIT",
   "type": "module",
   "bin": {
-    "clodiff": "src/cli.ts"
+    "clodiff": "dist/cli.js"
   },
   "scripts": {
+    "build": "node scripts/build.mjs",
+    "prepublishOnly": "npm run build",
+    "smoke": "node scripts/smoke-install.mjs",
     "test": "vitest run src/__tests__",
     "test:e2e": "playwright test"
   },
   "files": [
-    "src/cli.ts",
-    "src/server.ts",
-    "src/diff-parser.ts",
-    "src/anchoring.ts",
-    "src/session.ts",
-    "src/github.ts",
+    "dist",
     "viewer",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
-    "node": ">=22.18.0"
+    "node": ">=20.11.0"
   },
   "dependencies": {
     "ws": "^8.18.0"
@@ -31,6 +30,7 @@
     "@playwright/test": "^1.60.0",
     "@types/node": "^22.10.0",
     "@types/ws": "^8.5.13",
+    "esbuild": "^0.27.7",
     "tsx": "^4.22.4",
     "vitest": "^3.0.0"
   }
