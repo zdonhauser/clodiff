@@ -81,6 +81,34 @@ test("API activity keeps a viewerless daemon alive", async () => {
   }
 })
 
+test("--stop --if-idle keeps a daemon that has a viewer, stops it once closed", async ({ page }) => {
+  const dir = makeRepo()
+  const stopIfIdle = () =>
+    spawnSync("node", [DIST, "--stop", "--if-idle"], { cwd: dir, encoding: "utf-8", env: { ...process.env, BROWSER: "none" } })
+  try {
+    launch(dir, 7914, { CLODIFF_IDLE_HOURS: "0" }) // disable idle timer; isolate --if-idle
+    const { port } = await waitForSession(dir)
+
+    // Open the viewer (connects the WebSocket).
+    await page.goto(`http://localhost:${port}`)
+    await page.waitForSelector("[data-file-path='f.txt']", { timeout: 15000 })
+
+    // A viewer is connected — --if-idle must refuse to stop it.
+    const kept = stopIfIdle()
+    expect(kept.stdout).toMatch(/viewer/i)
+    expect(await alive(port)).toBe(true)
+
+    // Close the viewer; now --if-idle should stop it.
+    await page.close()
+    let down = false
+    for (let i = 0; i < 20; i++) { await wait(300); stopIfIdle(); if (!(await alive(port))) { down = true; break } }
+    expect(down).toBe(true)
+  } finally {
+    spawnSync("node", [DIST, "--stop"], { cwd: dir, encoding: "utf-8", env: { ...process.env, BROWSER: "none" } })
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test("a daemon shuts down when its repo/worktree is removed", async () => {
   const dir = makeRepo()
   // Disable the idle timeout so the *orphan* path is unambiguously what fires;

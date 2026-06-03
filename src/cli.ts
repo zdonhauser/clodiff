@@ -214,6 +214,7 @@ Other:
   --port <number>       Port to serve on (default 7777)
   --resume              Reuse the existing session for this repo
   --stop                Stop the clodiff server running for this repo
+  --stop --if-idle      Stop it only if no viewer is currently connected
   --status              Show whether a server is running for this repo (port/pid)
   -h, --help            Show this help
   -v, --version         Print the version
@@ -550,13 +551,13 @@ async function daemonize(rawArgs: string[], repoDir: string): Promise<void> {
 // port actually belongs to this repo before killing its PID, so we never signal a
 // recycled PID or another repo's server. session.json is left in place so the
 // review can be resumed later.
-async function stopServer(repoDir: string): Promise<void> {
+async function stopServer(repoDir: string, ifIdle = false): Promise<void> {
   const s = await loadSession(repoDir)
   if (!s?.port) {
     console.log("clodiff: no running session recorded for this repo")
     return
   }
-  const live = await fetch(`http://localhost:${s.port}/session`, { signal: AbortSignal.timeout(600) })
+  const live = await fetch(`http://localhost:${s.port}/status`, { signal: AbortSignal.timeout(600) })
     .then((r) => (r.ok ? r.json() : null))
     .catch(() => null)
   if (!live) {
@@ -565,6 +566,12 @@ async function stopServer(repoDir: string): Promise<void> {
   }
   if (live.repo !== repoDir) {
     console.log(`clodiff: port ${s.port} is serving a different repo now — not touching it`)
+    return
+  }
+  // --if-idle: only stop when no viewer is connected. Lets the session-end hook
+  // clean up daemons you're done with, without killing one you're still watching.
+  if (ifIdle && live.clients > 0) {
+    console.log(`clodiff: ${live.clients} viewer(s) still connected — leaving it running`)
     return
   }
   const pid = live.pid ?? s.pid
@@ -589,11 +596,12 @@ async function statusServer(repoDir: string): Promise<void> {
     console.log(`clodiff: not running for ${repoDir}`)
     return
   }
-  const live = await fetch(`http://localhost:${s.port}/session`, { signal: AbortSignal.timeout(600) })
+  const live = await fetch(`http://localhost:${s.port}/status`, { signal: AbortSignal.timeout(600) })
     .then((r) => (r.ok ? r.json() : null))
     .catch(() => null)
   if (live && live.repo === repoDir) {
-    console.log(`clodiff: running — http://localhost:${s.port} (pid ${live.pid ?? s.pid}) serving ${repoDir}`)
+    const viewers = live.clients === 1 ? "1 viewer" : `${live.clients} viewers`
+    console.log(`clodiff: running — http://localhost:${s.port} (pid ${live.pid ?? s.pid}, ${viewers}) serving ${repoDir}`)
   } else if (live) {
     console.log(`clodiff: not running for ${repoDir} — port ${s.port} is now serving a different repo (${live.repo})`)
   } else {
@@ -607,7 +615,7 @@ export async function runCli(): Promise<void> {
   const rawArgs = process.argv.slice(2)
   if (rawArgs.includes("--help") || rawArgs.includes("-h")) { console.log(HELP); return }
   if (rawArgs.includes("--version") || rawArgs.includes("-v")) { console.log(await readVersion()); return }
-  if (rawArgs.includes("--stop")) { await stopServer(process.cwd()); return }
+  if (rawArgs.includes("--stop")) { await stopServer(process.cwd(), rawArgs.includes("--if-idle")); return }
   if (rawArgs.includes("--status")) { await statusServer(process.cwd()); return }
 
   // CLODIFF_DAEMON: we ARE the detached child — run the server in the foreground

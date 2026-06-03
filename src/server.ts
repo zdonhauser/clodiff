@@ -144,6 +144,16 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
             }
           }
 
+          // GET /status — lightweight liveness/usage probe for the CLI
+          // (--status, --stop --if-idle, the session-end hook). Reports the repo
+          // it serves, its pid, and how many viewers are currently connected.
+          if (url.pathname === "/status" && req.method === "GET") {
+            return new Response(
+              JSON.stringify({ repo: repoDir, pid: process.pid, clients: wsClients.size, lastActivity }),
+              { status: 200, headers: { "Content-Type": "application/json" } },
+            )
+          }
+
           // GET /session — return current session.json
           if (url.pathname === "/session" && req.method === "GET") {
             const sessionPath = join(reviewDir(repoDir), "session.json")

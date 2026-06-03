@@ -197,6 +197,11 @@ it serves is removed. `session.json` is preserved, so just run `clodiff` again t
 **resume** the review where it left off. Set `CLODIFF_IDLE_HOURS` to change the
 timeout (e.g. `CLODIFF_IDLE_HOURS=8`), or `0` to disable idle shutdown.
 
+For prompt happy-path cleanup, `clodiff --stop --if-idle` stops the server only
+when no viewer is connected (leaving one you're still watching alone). The Claude
+Code plugin wires this into a `SessionEnd` hook, so ending a session you've
+finished with cleans up its daemon right away instead of waiting on the idle timer.
+
 Identity is **per git worktree**: clodiff keys its session/port off
 `git rev-parse --absolute-git-dir`, so each worktree (and each separate repo) gets
 its own independent daemon, port, and diff — run as many at once as you like, with
@@ -249,7 +254,7 @@ Install the **clodiff plugin** from [clogins](https://github.com/zdonhauser/clog
 /plugin install clodiff@clogins
 ```
 
-This installs two skills, three hooks, and a command:
+This installs two skills, four hooks, and a command:
 
 - **`clodiff` skill** — teaches Claude to start clodiff, navigate the viewer,
   highlight lines, and leave inline annotations during any code discussion
@@ -267,6 +272,9 @@ This installs two skills, three hooks, and a command:
   annotations, without overriding the engine you asked for
 - **`load-session` hook** — loads clodiff session state at startup so Claude
   is always aware of an active session
+- **`stop-on-session-end` hook** — when a session ends, stops the repo's clodiff
+  daemon *only if no viewer is connected*, so finished reviews clean up promptly
+  without killing a viewer you're still watching
 - **`/clodiff-watch` command** — manually start the replies watcher if you want
   proactive reply pickup and the hook hasn't already armed it
 
