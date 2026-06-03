@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFile } from "fs/promises"
-import { realpathSync, openSync, mkdirSync, writeFileSync } from "fs"
+import { realpathSync, openSync, mkdirSync, writeFileSync, existsSync } from "fs"
 import { join } from "path"
 import { tmpdir } from "os"
 import { spawn, spawnSync } from "child_process"
@@ -435,7 +435,7 @@ export async function main(): Promise<void> {
   }
 
   // Start the server
-  const { port, server } = await startServer({
+  const { port, server, getStats } = await startServer({
     port: args.port,
     repoDir,
     viewerDir: join(import.meta.dirname, "..", "viewer"),
@@ -466,6 +466,34 @@ export async function main(): Promise<void> {
   }
   process.on("SIGTERM", shutdown)
   process.on("SIGINT", shutdown)
+
+  // Idle/orphan watchdog — a detached daemon would otherwise run forever. Shut
+  // down when (a) the repo/worktree it serves is gone (e.g. `git worktree remove`
+  // orphaned it), or (b) it's been idle past the timeout: no viewer connected AND
+  // no API activity. Default 3h; set CLODIFF_IDLE_HOURS=0 to disable. session.json
+  // is kept, so a later `clodiff` relaunch resumes the review where it left off.
+  const idleHours = Number(process.env.CLODIFF_IDLE_HOURS ?? 3)
+  const idleMs = idleHours > 0 ? idleHours * 3_600_000 : 0
+  // Check every 60s normally; scale down for short timeouts so tests don't wait.
+  // CLODIFF_CHECK_SECONDS overrides the cadence (used by tests; also lets the
+  // orphan check run faster even when the idle timeout is disabled).
+  const checkMs = process.env.CLODIFF_CHECK_SECONDS
+    ? Math.max(250, Number(process.env.CLODIFF_CHECK_SECONDS) * 1000)
+    : idleMs > 0 ? Math.min(60_000, Math.max(1_000, Math.floor(idleMs / 3))) : 60_000
+  const watchdog = setInterval(() => {
+    if (!existsSync(repoDir)) {
+      console.log(`clodiff: ${repoDir} no longer exists — shutting down`)
+      shutdown()
+    }
+    if (idleMs > 0) {
+      const { clients, lastActivity } = getStats()
+      if (clients === 0 && Date.now() - lastActivity > idleMs) {
+        console.log(`clodiff: idle ${idleHours}h with no viewer — shutting down (run 'clodiff' to resume)`)
+        shutdown()
+      }
+    }
+  }, checkMs)
+  watchdog.unref()
 
   const url = `http://localhost:${port}`
   openBrowser(url)

@@ -90,16 +90,26 @@ export interface StartServerResult {
   // (server is a Node http.Server; call .close() to stop)
   port: number
   server: Server
+  // Liveness stats for the idle/orphan watchdog: how many viewers are connected
+  // and when the server last saw any request or WebSocket message.
+  getStats: () => { clients: number; lastActivity: number }
 }
 
 export async function startServer(options: ServerOptions): Promise<StartServerResult> {
   const { repoDir, viewerDir, getInitPayload, getRefs, onRediff, onSetMode } = options
   const wsClients = new Set<WebSocket>()
 
+  // Activity tracking for the idle watchdog (see cli.ts): every request and every
+  // WebSocket message bumps this, so a server that's actively being used (even
+  // with no viewer tab open — e.g. Claude posting annotations) is never reaped.
+  let lastActivity = Date.now()
+  const markActive = () => { lastActivity = Date.now() }
+
   // Route handler — written against web-standard Request/Response. The Node http
   // server below bridges to it. WebSocket upgrades are handled separately (the
   // http "upgrade" event), so there's no /ws branch here.
   async function handleRequest(req: Request): Promise<Response> {
+    markActive()
     try {
           const url = new URL(req.url)
 
@@ -615,11 +625,13 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
   const wss = new WebSocketServer({ noServer: true })
   wss.on("connection", (ws: WebSocket) => {
     wsClients.add(ws)
+    markActive()
     if (getInitPayload) {
       Promise.resolve(getInitPayload())
         .then((payload) => ws.send(JSON.stringify(payload)))
         .catch(() => { /* don't crash on init payload errors */ })
     }
+    ws.on("message", markActive)
     ws.on("close", () => wsClients.delete(ws))
     ws.on("error", () => wsClients.delete(ws))
   })
@@ -687,5 +699,5 @@ export async function startServer(options: ServerOptions): Promise<StartServerRe
     })
   } catch { /* ignore */ }
 
-  return { port, server }
+  return { port, server, getStats: () => ({ clients: wsClients.size, lastActivity }) }
 }

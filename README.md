@@ -191,6 +191,12 @@ server with `clodiff --stop` from the repo (the review state is kept, so you can
 resume later), and check `clodiff --status` to see whether one is running and on
 which port. The daemon logs to `<git-dir>/clodiff/clodiff.log`.
 
+It also **won't run forever**: a daemon shuts itself down after **3 hours idle**
+(no viewer connected *and* no API activity), or immediately if the repo/worktree
+it serves is removed. `session.json` is preserved, so just run `clodiff` again to
+**resume** the review where it left off. Set `CLODIFF_IDLE_HOURS` to change the
+timeout (e.g. `CLODIFF_IDLE_HOURS=8`), or `0` to disable idle shutdown.
+
 Identity is **per git worktree**: clodiff keys its session/port off
 `git rev-parse --absolute-git-dir`, so each worktree (and each separate repo) gets
 its own independent daemon, port, and diff — run as many at once as you like, with
